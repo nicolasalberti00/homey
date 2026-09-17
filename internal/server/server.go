@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nicolasalberti00/homey/internal/config"
+	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
 const (
@@ -48,6 +49,11 @@ func NewHandler(logger *slog.Logger, db *sql.DB) http.Handler {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	NewAPI(mux, Deps{
+		Repos:  storage.NewRepos(db),
+		Logger: logger,
 	})
 
 	return requestLogger(logger, mux)
