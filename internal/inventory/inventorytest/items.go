@@ -1,8 +1,10 @@
 package inventorytest
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/nicolasalberti00/homey/internal/inventory"
@@ -132,6 +134,120 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		createItem(t, repos, "Cable", inventory.RoomLocation(kitchen.ID))
 		createItem(t, repos, "Cable", inventory.ContainerLocation(toolbox.ID))
 		createItem(t, repos, "Cable", inventory.ContainerLocation(shelf.ID))
+	})
+
+	t.Run("CreatePersistsTags", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := inventory.Item{
+			Name:     "Drill",
+			Quantity: 1,
+			Location: inventory.RoomLocation(room.ID),
+			Tags:     []string{"  Strumenti  ", "bagno"},
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &item), "Create")
+
+		want := []string{"bagno", "Strumenti"}
+		if !slices.Equal(item.Tags, want) {
+			t.Fatalf("Create left tags %v, want %v", item.Tags, want)
+		}
+		got, err := repos.Items.Get(ctx, item.ID)
+		requiresNoError(t, err, "Get")
+		if !slices.Equal(got.Tags, want) {
+			t.Fatalf("Get tags = %v, want %v", got.Tags, want)
+		}
+	})
+
+	t.Run("CreateWithoutTagsReturnsEmpty", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		item := createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+		if item.Tags == nil || len(item.Tags) != 0 {
+			t.Fatalf("created item tags = %v, want non-nil empty", item.Tags)
+		}
+	})
+
+	t.Run("CreateRejectsInvalidTags", func(t *testing.T) {
+		tooMany := make([]string, inventory.MaxTagsPerItem+1)
+		for index := range tooMany {
+			tooMany[index] = fmt.Sprintf("tag-%d", index)
+		}
+		cases := []struct {
+			name string
+			tags []string
+		}{
+			{"empty tag", []string{"bagno", "   "}},
+			{"tag above maximum length", []string{strings.Repeat("a", inventory.MaxTagLen+1)}},
+			{"case-insensitive duplicate", []string{"Bagno", "bagno"}},
+			{"too many tags", tooMany},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				repos := newRepos(t)
+				room := createRoom(t, repos, "Garage")
+				item := inventory.Item{
+					Name:     "Drill",
+					Quantity: 1,
+					Location: inventory.RoomLocation(room.ID),
+					Tags:     tc.tags,
+				}
+				err := repos.Items.Create(t.Context(), &item)
+				requiresError(t, err, inventory.ErrValidation, "Create")
+				requiresValidationProblem(t, err, "tags")
+			})
+		}
+	})
+
+	t.Run("SameTagOnDifferentItemsIsAllowed", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+
+		first := inventory.Item{Name: "Drill", Quantity: 1, Location: inventory.RoomLocation(room.ID), Tags: []string{"Strumenti"}}
+		second := inventory.Item{Name: "Saw", Quantity: 1, Location: inventory.RoomLocation(room.ID), Tags: []string{"strumenti"}}
+		requiresNoError(t, repos.Items.Create(t.Context(), &first), "Create first")
+		requiresNoError(t, repos.Items.Create(t.Context(), &second), "Create second")
+	})
+
+	t.Run("UpdateReplacesTags", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+
+		item.Tags = []string{"Strumenti", "Officina"}
+		requiresNoError(t, repos.Items.Update(ctx, &item), "Update with tags")
+		if want := []string{"Officina", "Strumenti"}; !slices.Equal(item.Tags, want) {
+			t.Fatalf("Update left tags %v, want %v", item.Tags, want)
+		}
+
+		item.Tags = []string{"Bagno"}
+		requiresNoError(t, repos.Items.Update(ctx, &item), "Update with one tag")
+		got, err := repos.Items.Get(ctx, item.ID)
+		requiresNoError(t, err, "Get")
+		if want := []string{"Bagno"}; !slices.Equal(got.Tags, want) {
+			t.Fatalf("Get tags = %v, want %v", got.Tags, want)
+		}
+	})
+
+	t.Run("ListIncludesTags", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		item := inventory.Item{
+			Name:     "Drill",
+			Quantity: 1,
+			Location: inventory.RoomLocation(room.ID),
+			Tags:     []string{"Strumenti"},
+		}
+		requiresNoError(t, repos.Items.Create(t.Context(), &item), "Create")
+
+		items, err := repos.Items.List(t.Context())
+		requiresNoError(t, err, "List")
+		if len(items) != 1 || !slices.Equal(items[0].Tags, []string{"Strumenti"}) {
+			t.Fatalf("List = %+v, want one item tagged Strumenti", items)
+		}
 	})
 
 	t.Run("UpdateRejectsDuplicateNameInLocation", func(t *testing.T) {
