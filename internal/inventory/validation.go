@@ -124,11 +124,12 @@ func validateTags(v *ValidationError, field string, tags []string) {
 	seen := make(map[string]bool, len(tags))
 	for index, tag := range tags {
 		position := index + 1
-		if tag == "" {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
 			v.add(field, fmt.Sprintf("tag %d must not be empty", position))
 			continue
 		}
-		if n := len([]rune(tag)); n > MaxTagLen {
+		if n := len([]rune(trimmed)); n > MaxTagLen {
 			v.add(field, fmt.Sprintf("tag %d must be at most %d characters", position, MaxTagLen))
 		}
 		key := strings.ToLower(tag)
