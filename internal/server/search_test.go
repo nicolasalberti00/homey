@@ -7,9 +7,9 @@ import (
 )
 
 func TestSearchIsAStable501Stub(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	rec := api.Get("/search?q=trapano")
+	rec := api.Get("/search?q=trapano", bearer.Read)
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501; body: %s", rec.Code, rec.Body.String())
 	}
@@ -22,7 +22,7 @@ func TestSearchIsAStable501Stub(t *testing.T) {
 	}
 
 	// The query is part of the contract already.
-	rec = api.Get("/search")
+	rec = api.Get("/search", bearer.Read)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422 without q", rec.Code)
 	}

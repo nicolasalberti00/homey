@@ -50,8 +50,31 @@ flags take precedence.
 - `GET /healthz` — liveness
 - `GET /readyz` — readiness (pings the database)
 
-The REST API under `/api/v1/` arrives in Phase 3; the OpenAPI contract lives
-in [`api/openapi.yaml`](api/openapi.yaml).
+The REST API under `/api/v1/` is documented by the generated contract in
+[`api/openapi.yaml`](api/openapi.yaml). Rooms, containers, items and moves
+are live; search answers `501` until Phase 5. Regenerate the contract after
+changing any operation:
+
+```bash
+go run ./cmd/openapi > api/openapi.yaml
+```
+
+## API tokens
+
+Every `/api/v1/` operation requires a bearer token; only the spec, the docs
+UI and the schemas are public. Tokens are stored hashed (SHA-256) and shown
+once at creation:
+
+```bash
+go run ./cmd/server token create --name "curl" --scope read,write
+go run ./cmd/server token list
+go run ./cmd/server token revoke <id>
+```
+
+`--scope read` allows only reads; `--scope read,write` also allows mutations.
+`--destructive-confirmation=bypass` marks a trusted token for the future
+two-step destructive flows (Phase 6). Without a token the API answers `401`;
+a read-only token gets `403` on mutating operations.
 
 ## Development
 

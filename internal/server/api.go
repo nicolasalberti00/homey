@@ -20,6 +20,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
+	"github.com/nicolasalberti00/homey/internal/auth"
 	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
@@ -33,6 +34,7 @@ const apiVersion = "0.1.0"
 // spec-only API, which is what the openapi generator uses.
 type Deps struct {
 	Repos  storage.Repos
+	Tokens auth.Store
 	Logger *slog.Logger
 }
 
@@ -40,6 +42,11 @@ type Deps struct {
 func NewAPI(mux *http.ServeMux, deps Deps) huma.API {
 	api := humago.NewWithPrefix(mux, "/api/v1", apiConfig())
 
+	// Authentication wraps every registered operation; the spec, the docs UI
+	// and the schemas are registered as raw routes and stay public.
+	if deps.Tokens != nil {
+		api.UseMiddleware(bearerAuth(deps.Tokens, deps.Logger))
+	}
 	registerOperations(api, deps)
 
 	return api
@@ -59,7 +66,7 @@ func registerOperations(api huma.API, deps Deps) {
 // and response behavior as production.
 func apiConfig() huma.Config {
 	cfg := huma.DefaultConfig("homey API", apiVersion)
-	cfg.Info.Description = "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves."
+	cfg.Info.Description = "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves. All operations require a bearer token except this document, the docs UI and the schemas."
 	cfg.OpenAPIPath = "/openapi"
 	cfg.DocsPath = "/docs"
 	cfg.Servers = []*huma.Server{{URL: "/api/v1", Description: "Versioned API root"}}

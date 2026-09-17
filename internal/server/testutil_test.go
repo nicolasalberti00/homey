@@ -2,9 +2,11 @@ package server
 
 // Shared helpers for the API handler tests: they build an API with the
 // production configuration (apiConfig) and the full set of operations wired
-// to a fresh SQLite database, mirroring the production wiring.
+// to a fresh SQLite database, mirroring the production wiring — including
+// the token store, so tests exercise the same authentication as production.
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -14,10 +16,17 @@ import (
 
 	"github.com/danielgtaylor/huma/v2/humatest"
 
+	"github.com/nicolasalberti00/homey/internal/auth"
 	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
-func newTestAPI(t *testing.T) humatest.TestAPI {
+// testTokens carries the bearer header values for the two test identities.
+type testTokens struct {
+	Write string // grants read and write
+	Read  string // grants read only
+}
+
+func newTestAPI(t *testing.T) (humatest.TestAPI, testTokens) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "homey.db")
 	if err := storage.MigrateUp(dbPath); err != nil {
@@ -30,9 +39,32 @@ func newTestAPI(t *testing.T) humatest.TestAPI {
 	t.Cleanup(func() { db.Close() })
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
+	store := storage.NewTokenStore(db)
+	tokens := testTokens{
+		Write: makeTokenHeader(t, store, "test write", "read,write"),
+		Read:  makeTokenHeader(t, store, "test read", "read"),
+	}
+
 	_, api := humatest.New(t, apiConfig())
-	registerOperations(api, Deps{Repos: storage.NewRepos(db), Logger: logger})
-	return api
+	api.UseMiddleware(bearerAuth(store, logger))
+	registerOperations(api, Deps{Repos: storage.NewRepos(db), Tokens: store, Logger: logger})
+	return api, tokens
+}
+
+func makeTokenHeader(t *testing.T, store auth.Store, name, scopes string) string {
+	t.Helper()
+	plaintext, err := auth.NewToken()
+	if err != nil {
+		t.Fatalf("generating token: %v", err)
+	}
+	parsed, err := auth.ParseScopes(scopes)
+	if err != nil {
+		t.Fatalf("parsing scopes: %v", err)
+	}
+	if _, err := store.Create(context.Background(), name, parsed, auth.ConfirmationRequired, auth.Hash(plaintext)); err != nil {
+		t.Fatalf("creating token: %v", err)
+	}
+	return "Authorization: Bearer " + plaintext
 }
 
 // decodeProblem decodes an RFC 9457 problem document, including the optional
