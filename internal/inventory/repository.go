@@ -20,6 +20,8 @@ import "context"
 //   - Names are unique within their scope: a room name across the inventory,
 //     a container name within its room, an item name within its location.
 //     Duplicate names fail with ErrConflict; comparison is case-insensitive.
+//   - A container can never become its own ancestor: re-parenting it under
+//     itself or under one of its descendants fails with ErrCycle.
 //   - Listings are ordered by name, case-insensitively, then by ID, and
 //     return a non-nil empty slice when nothing matches.
 //   - Entities read from storage carry their ID and UTC timestamps.
@@ -54,9 +56,14 @@ type ContainerRepo interface {
 	Get(ctx context.Context, id ContainerID) (Container, error)
 	// ListByRoom returns every container of a room, at any nesting depth.
 	ListByRoom(ctx context.Context, roomID RoomID) ([]Container, error)
+	// Path returns the location of a container: its room and the chain of
+	// containers from the top down, ending with the container itself.
+	Path(ctx context.Context, id ContainerID) (ContainerPath, error)
 	// Update replaces the stored parent, name and description of container
 	// and refreshes its updated timestamp. Containers cannot change room;
-	// moving them is a separate operation.
+	// moving them is a separate operation. Re-parenting is refused with
+	// ErrCycle when the new parent is the container itself or one of its
+	// descendants.
 	Update(ctx context.Context, container *Container) error
 	// Delete removes a container that has no child containers and no items.
 	// It fails with ErrConflict otherwise.
