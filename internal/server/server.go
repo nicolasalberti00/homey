@@ -35,6 +35,7 @@ func New(cfg *config.Config, logger *slog.Logger, db *sql.DB) *http.Server {
 // can exercise it with httptest.
 func NewHandler(logger *slog.Logger, db *sql.DB) http.Handler {
 	mux := http.NewServeMux()
+	tokens := storage.NewTokenStore(db)
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -53,6 +54,7 @@ func NewHandler(logger *slog.Logger, db *sql.DB) http.Handler {
 
 	NewAPI(mux, Deps{
 		Repos:  storage.NewRepos(db),
+		Tokens: tokens,
 		Logger: logger,
 	})
 

@@ -13,9 +13,9 @@ func pathID(id int64) string {
 }
 
 func TestRoomLifecycle(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	rec := api.Post("/rooms", RoomInput{Name: "  Garage  ", Description: "  cars and tools  "})
+	rec := api.Post("/rooms", bearer.Write, RoomInput{Name: "  Garage  ", Description: "  cars and tools  "})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
 	}
@@ -27,7 +27,7 @@ func TestRoomLifecycle(t *testing.T) {
 		t.Fatalf("created = %+v", created)
 	}
 
-	rec = api.Get("/rooms")
+	rec = api.Get("/rooms", bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -39,13 +39,13 @@ func TestRoomLifecycle(t *testing.T) {
 		t.Fatalf("list = %+v", list)
 	}
 
-	rec = api.Get(pathID(created.ID))
+	rec = api.Get(pathID(created.ID), bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 
 	name := "Workshop"
-	rec = api.Patch(pathID(created.ID), RoomPatch{Name: &name})
+	rec = api.Patch(pathID(created.ID), bearer.Write, RoomPatch{Name: &name})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -57,27 +57,27 @@ func TestRoomLifecycle(t *testing.T) {
 		t.Fatalf("updated = %+v", updated)
 	}
 
-	rec = api.Delete(pathID(created.ID))
+	rec = api.Delete(pathID(created.ID), bearer.Write)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
 
-	rec = api.Get(pathID(created.ID))
+	rec = api.Get(pathID(created.ID), bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 after delete", rec.Code)
 	}
 }
 
 func TestRoomErrors(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	rec := api.Post("/rooms", RoomInput{Name: "Garage"})
+	rec := api.Post("/rooms", bearer.Write, RoomInput{Name: "Garage"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", rec.Code)
 	}
 
 	// Duplicate name: 409 with an RFC 9457 problem.
-	rec = api.Post("/rooms", RoomInput{Name: "garage"})
+	rec = api.Post("/rooms", bearer.Write, RoomInput{Name: "garage"})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409; body: %s", rec.Code, rec.Body.String())
 	}
@@ -93,7 +93,7 @@ func TestRoomErrors(t *testing.T) {
 	}
 
 	// Unknown room: 404 with the lookup context as detail.
-	rec = api.Get("/rooms/4242")
+	rec = api.Get("/rooms/4242", bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
@@ -103,7 +103,7 @@ func TestRoomErrors(t *testing.T) {
 	}
 
 	// Schema-level validation: 422 from Huma itself.
-	rec = api.Post("/rooms", RoomInput{Name: ""})
+	rec = api.Post("/rooms", bearer.Write, RoomInput{Name: ""})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
 	}
@@ -114,7 +114,7 @@ func TestRoomErrors(t *testing.T) {
 
 	// Domain-level validation: a whitespace-only name passes the schema, the
 	// core rejects it, and the mapper turns it into the same 422 shape.
-	rec = api.Post("/rooms", RoomInput{Name: "   "})
+	rec = api.Post("/rooms", bearer.Write, RoomInput{Name: "   "})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -125,7 +125,7 @@ func TestRoomErrors(t *testing.T) {
 
 	// Patching an unknown room: 404.
 	name := "Workshop"
-	rec = api.Patch("/rooms/4242", RoomPatch{Name: &name})
+	rec = api.Patch("/rooms/4242", bearer.Write, RoomPatch{Name: &name})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
