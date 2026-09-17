@@ -2,6 +2,8 @@ package inventory
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -73,10 +75,13 @@ func TestNormalizeTrimsTextFields(t *testing.T) {
 		t.Fatalf("Normalize = %q/%q", r.Name, r.Description)
 	}
 
-	i := Item{Name: " drill ", Description: " cordless ", Notes: " warranty 2y "}
+	i := Item{Name: " drill ", Description: " cordless ", Notes: " warranty 2y ", Tags: []string{" strumenti ", " bagno "}}
 	i.Normalize()
 	if i.Name != "drill" || i.Description != "cordless" || i.Notes != "warranty 2y" {
 		t.Fatalf("Normalize = %q/%q/%q", i.Name, i.Description, i.Notes)
+	}
+	if !slices.Equal(i.Tags, []string{"strumenti", "bagno"}) {
+		t.Fatalf("Normalize tags = %v", i.Tags)
 	}
 }
 
@@ -159,6 +164,37 @@ func TestItemValidate(t *testing.T) {
 	t.Run("long notes", func(t *testing.T) {
 		i := Item{Name: "Drill", Quantity: 1, Location: RoomLocation(1), Notes: strings.Repeat("n", MaxNotesLen+1)}
 		assertProblem(t, i.Validate(), "notes")
+	})
+
+	t.Run("valid tags", func(t *testing.T) {
+		i := Item{Name: "Drill", Quantity: 1, Location: RoomLocation(1), Tags: []string{"Strumenti", "bagno"}}
+		if err := i.Validate(); err != nil {
+			t.Fatalf("Validate: %v", err)
+		}
+	})
+
+	t.Run("empty tag", func(t *testing.T) {
+		i := Item{Name: "Drill", Quantity: 1, Location: RoomLocation(1), Tags: []string{"bagno", "  "}}
+		assertProblem(t, i.Validate(), "tags")
+	})
+
+	t.Run("tag above maximum length", func(t *testing.T) {
+		i := Item{Name: "Drill", Quantity: 1, Location: RoomLocation(1), Tags: []string{strings.Repeat("a", MaxTagLen+1)}}
+		assertProblem(t, i.Validate(), "tags")
+	})
+
+	t.Run("case-insensitive duplicate tags", func(t *testing.T) {
+		i := Item{Name: "Drill", Quantity: 1, Location: RoomLocation(1), Tags: []string{"Bagno", "bagno"}}
+		assertProblem(t, i.Validate(), "tags")
+	})
+
+	t.Run("too many tags", func(t *testing.T) {
+		tags := make([]string, MaxTagsPerItem+1)
+		for index := range tags {
+			tags[index] = fmt.Sprintf("tag-%d", index)
+		}
+		i := Item{Name: "Drill", Quantity: 1, Location: RoomLocation(1), Tags: tags}
+		assertProblem(t, i.Validate(), "tags")
 	})
 }
 
