@@ -18,6 +18,10 @@ const (
 	// MaxQuantity is the maximum item quantity accepted. The lower bound is
 	// zero: negative quantities are always invalid.
 	MaxQuantity = 1_000_000
+	// MaxTagLen is the maximum length of a single item tag.
+	MaxTagLen = 40
+	// MaxTagsPerItem is the maximum number of tags one item can carry.
+	MaxTagsPerItem = 20
 )
 
 // Normalize trims surrounding whitespace from the user-provided text fields
@@ -40,6 +44,9 @@ func (i *Item) Normalize() {
 	i.Name = strings.TrimSpace(i.Name)
 	i.Description = strings.TrimSpace(i.Description)
 	i.Notes = strings.TrimSpace(i.Notes)
+	for index, tag := range i.Tags {
+		i.Tags[index] = strings.TrimSpace(tag)
+	}
 }
 
 // Validate checks the room fields against the domain rules.
@@ -81,6 +88,7 @@ func (i *Item) Validate() error {
 	} else if i.Quantity > MaxQuantity {
 		v.add("quantity", fmt.Sprintf("must be at most %d", MaxQuantity))
 	}
+	validateTags(v, "tags", i.Tags)
 	validateLocation(v, "location", i.Location)
 	return v.orNil()
 }
@@ -104,6 +112,31 @@ func validateName(v *ValidationError, field, name string) {
 func validateLength(v *ValidationError, field, value string, max int) {
 	if n := len([]rune(strings.TrimSpace(value))); n > max {
 		v.add(field, fmt.Sprintf("must be at most %d characters", max))
+	}
+}
+
+// validateTags checks the item tags: at most MaxTagsPerItem, each non-empty
+// and at most MaxTagLen characters, without case-insensitive duplicates.
+func validateTags(v *ValidationError, field string, tags []string) {
+	if len(tags) > MaxTagsPerItem {
+		v.add(field, fmt.Sprintf("must contain at most %d tags", MaxTagsPerItem))
+	}
+	seen := make(map[string]bool, len(tags))
+	for index, tag := range tags {
+		position := index + 1
+		if tag == "" {
+			v.add(field, fmt.Sprintf("tag %d must not be empty", position))
+			continue
+		}
+		if n := len([]rune(tag)); n > MaxTagLen {
+			v.add(field, fmt.Sprintf("tag %d must be at most %d characters", position, MaxTagLen))
+		}
+		key := strings.ToLower(tag)
+		if seen[key] {
+			v.add(field, fmt.Sprintf("tag %d duplicates %q", position, tag))
+			continue
+		}
+		seen[key] = true
 	}
 }
 

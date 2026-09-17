@@ -55,6 +55,34 @@ WHERE id = ?
 RETURNING id, room_id, container_id, name, description, quantity, notes, created_at, updated_at`
 
 	deleteItemSQL = `DELETE FROM items WHERE id = ? RETURNING id`
+
+	insertItemTagSQL = `INSERT INTO item_tags (item_id, tag) VALUES (?, ?)`
+
+	deleteItemTagsSQL = `DELETE FROM item_tags WHERE item_id = ?`
+
+	getItemTagsSQL = `
+SELECT tag
+FROM item_tags
+WHERE item_id = ?
+ORDER BY tag COLLATE NOCASE, tag`
+
+	listItemTagsSQL = `
+SELECT it.item_id, it.tag
+FROM item_tags it
+WHERE it.item_id IN (SELECT id FROM items)
+ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
+
+	listItemTagsByRoomSQL = `
+SELECT it.item_id, it.tag
+FROM item_tags it
+WHERE it.item_id IN (SELECT id FROM items WHERE room_id = ?)
+ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
+
+	listItemTagsByContainerSQL = `
+SELECT it.item_id, it.tag
+FROM item_tags it
+WHERE it.item_id IN (SELECT id FROM items WHERE container_id = ?)
+ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
 )
 
 // Create implements inventory.ItemRepo.
@@ -77,7 +105,10 @@ func (r *itemRepo) Create(ctx context.Context, item *inventory.Item) error {
 			}
 			return fmt.Errorf("creating item: %w", err)
 		}
-		return nil
+		if err := replaceItemTags(ctx, tx, item.ID, item.Tags); err != nil {
+			return err
+		}
+		return loadItemTags(ctx, tx, item)
 	})
 }
 
@@ -91,12 +122,15 @@ func (r *itemRepo) Get(ctx context.Context, id inventory.ItemID) (inventory.Item
 	if err != nil {
 		return inventory.Item{}, fmt.Errorf("getting item %d: %w", id, err)
 	}
+	if err := loadItemTags(ctx, r.db, &item); err != nil {
+		return inventory.Item{}, err
+	}
 	return item, nil
 }
 
 // List implements inventory.ItemRepo.
 func (r *itemRepo) List(ctx context.Context) ([]inventory.Item, error) {
-	return queryItems(ctx, r.db, listItemsSQL)
+	return queryItems(ctx, r.db, listItemsSQL, listItemTagsSQL)
 }
 
 // ListByLocation implements inventory.ItemRepo.
@@ -108,9 +142,9 @@ func (r *itemRepo) ListByLocation(ctx context.Context, location inventory.Locati
 		return nil, err
 	}
 	if location.IsRoom() {
-		return queryItems(ctx, r.db, listItemsByRoomSQL, location.ID)
+		return queryItems(ctx, r.db, listItemsByRoomSQL, listItemTagsByRoomSQL, location.ID)
 	}
-	return queryItems(ctx, r.db, listItemsByContainerSQL, location.ID)
+	return queryItems(ctx, r.db, listItemsByContainerSQL, listItemTagsByContainerSQL, location.ID)
 }
 
 // Update implements inventory.ItemRepo.
@@ -137,7 +171,10 @@ func (r *itemRepo) Update(ctx context.Context, item *inventory.Item) error {
 		if err != nil {
 			return fmt.Errorf("updating item %d: %w", item.ID, err)
 		}
-		return nil
+		if err := replaceItemTags(ctx, tx, item.ID, item.Tags); err != nil {
+			return err
+		}
+		return loadItemTags(ctx, tx, item)
 	})
 }
 
@@ -201,8 +238,86 @@ func scanItem(row rowScanner, item *inventory.Item) error {
 	return nil
 }
 
-// queryItems runs one of the constant item listings and scans the result.
-func queryItems(ctx context.Context, q querier, query string, args ...any) ([]inventory.Item, error) {
+// replaceItemTags rewrites the tags of one item with a delete-and-insert:
+// the set is small and fully owned by the item, so replacing it is simpler
+// than diffing it.
+func replaceItemTags(ctx context.Context, tx *sql.Tx, itemID inventory.ItemID, tags []string) error {
+	if _, err := tx.ExecContext(ctx, deleteItemTagsSQL, itemID); err != nil {
+		return fmt.Errorf("clearing tags of item %d: %w", itemID, err)
+	}
+	for _, tag := range tags {
+		if _, err := tx.ExecContext(ctx, insertItemTagSQL, itemID, tag); err != nil {
+			return fmt.Errorf("storing tag %q of item %d: %w", tag, itemID, err)
+		}
+	}
+	return nil
+}
+
+// loadItemTags reads the tags of one item, ordered case-insensitively.
+func loadItemTags(ctx context.Context, q querier, item *inventory.Item) error {
+	rows, err := q.QueryContext(ctx, getItemTagsSQL, item.ID)
+	if err != nil {
+		return fmt.Errorf("loading tags of item %d: %w", item.ID, err)
+	}
+	defer rows.Close()
+
+	tags := make([]string, 0, 4)
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return err
+		}
+		tags = append(tags, tag)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("loading tags of item %d: %w", item.ID, err)
+	}
+	item.Tags = tags
+	return nil
+}
+
+// attachItemTags loads the tags of a whole listing with one query and folds
+// them into the items, so listings do not pay one query per item.
+func attachItemTags(ctx context.Context, q querier, query string, args []any, items []inventory.Item) error {
+	for index := range items {
+		if items[index].Tags == nil {
+			items[index].Tags = []string{}
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+
+	byID := make(map[inventory.ItemID]int, len(items))
+	for index, item := range items {
+		byID[item.ID] = index
+	}
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("listing item tags: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var itemID inventory.ItemID
+		var tag string
+		if err := rows.Scan(&itemID, &tag); err != nil {
+			return err
+		}
+		if index, ok := byID[itemID]; ok {
+			items[index].Tags = append(items[index].Tags, tag)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("listing item tags: %w", err)
+	}
+	return nil
+}
+
+// queryItems runs one of the constant item listings, scans the result and
+// attaches the tags of every item.
+func queryItems(ctx context.Context, q querier, query, tagsQuery string, args ...any) ([]inventory.Item, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing items: %w", err)
@@ -219,6 +334,9 @@ func queryItems(ctx context.Context, q querier, query string, args ...any) ([]in
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("listing items: %w", err)
+	}
+	if err := attachItemTags(ctx, q, tagsQuery, args, items); err != nil {
+		return nil, err
 	}
 	return items, nil
 }

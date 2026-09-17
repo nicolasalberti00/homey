@@ -27,7 +27,7 @@ func openDB(t *testing.T, dbPath string) *sql.DB {
 
 func TestMigrateUpCreatesSchema(t *testing.T) {
 	db := openDB(t, mustMigrate(t))
-	for _, table := range []string{"rooms", "containers", "items", "api_tokens", "schema_migrations"} {
+	for _, table := range []string{"rooms", "containers", "items", "item_tags", "api_tokens", "schema_migrations"} {
 		var name string
 		err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
 		if err != nil {
@@ -48,8 +48,8 @@ func TestMigrationVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrationVersion: %v", err)
 	}
-	if version != 3 || dirty {
-		t.Fatalf("version = %d dirty = %t, want 3/false", version, dirty)
+	if version != 4 || dirty {
+		t.Fatalf("version = %d dirty = %t, want 4/false", version, dirty)
 	}
 }
 
@@ -153,5 +153,27 @@ func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := db.Exec(query, args...); err != nil {
 		t.Fatalf("exec %s: %v", query, err)
+	}
+}
+
+func TestItemTagsCascadeOnDelete(t *testing.T) {
+	db := openDB(t, mustMigrate(t))
+
+	mustExec(t, db, `INSERT INTO rooms (name) VALUES ('Garage')`)
+	mustExec(t, db, `INSERT INTO items (room_id, name) VALUES (1, 'Drill')`)
+	mustExec(t, db, `INSERT INTO item_tags (item_id, tag) VALUES (1, 'Strumenti')`)
+
+	if _, err := db.Exec(`INSERT INTO item_tags (item_id, tag) VALUES (1, 'strumenti')`); err == nil {
+		t.Fatal("case-insensitive duplicate tag on the same item should be rejected")
+	}
+
+	mustExec(t, db, `DELETE FROM items WHERE id = 1`)
+
+	var tags int
+	if err := db.QueryRow(`SELECT count(*) FROM item_tags`).Scan(&tags); err != nil {
+		t.Fatalf("counting tags: %v", err)
+	}
+	if tags != 0 {
+		t.Fatalf("item_tags rows after deleting the item = %d, want 0 (ON DELETE CASCADE)", tags)
 	}
 }

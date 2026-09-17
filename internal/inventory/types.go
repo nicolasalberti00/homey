@@ -58,12 +58,17 @@ func (p ContainerPath) String() string {
 
 // Item is a single object in the inventory. It lives in exactly one location:
 // a room or a container.
+//
+// Tags are free-form labels such as "strumenti" or "bagno". They are unique
+// within the item (case-insensitively) and listings order them
+// case-insensitively.
 type Item struct {
 	ID          ItemID
 	Name        string
 	Description string
 	Quantity    int
 	Notes       string
+	Tags        []string
 	Location    Location
 	CreatedAt   time.Time
 	UpdatedAt   time.Time

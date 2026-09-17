@@ -22,6 +22,9 @@ import "context"
 //     Duplicate names fail with ErrConflict; comparison is case-insensitive.
 //   - A container can never become its own ancestor: re-parenting it under
 //     itself or under one of its descendants fails with ErrCycle.
+//   - Item tags are trimmed, case-insensitively unique within their item,
+//     limited to MaxTagsPerItem tags of MaxTagLen characters, and returned
+//     ordered case-insensitively.
 //   - Listings are ordered by name, case-insensitively, then by ID, and
 //     return a non-nil empty slice when nothing matches.
 //   - Entities read from storage carry their ID and UTC timestamps.
