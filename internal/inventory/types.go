@@ -1,6 +1,9 @@
 package inventory
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // RoomID identifies a room. IDs are assigned by the storage layer; a zero ID
 // means "not persisted yet".
@@ -33,6 +36,24 @@ type Container struct {
 	Description string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// ContainerPath is the location of a container: its room and the nested
+// containers that lead to it, ordered from the top down and ending with the
+// container itself.
+type ContainerPath struct {
+	Room       Room
+	Containers []Container
+}
+
+// String renders the path as "Garage > Toolbox > Drawer 1".
+func (p ContainerPath) String() string {
+	parts := make([]string, 0, len(p.Containers)+1)
+	parts = append(parts, p.Room.Name)
+	for _, container := range p.Containers {
+		parts = append(parts, container.Name)
+	}
+	return strings.Join(parts, " > ")
 }
 
 // Item is a single object in the inventory. It lives in exactly one location:

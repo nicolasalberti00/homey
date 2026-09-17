@@ -164,6 +164,47 @@ func testContainers(t *testing.T, newRepos NewRepos) {
 		requiresError(t, err, inventory.ErrNotFound, "Get")
 	})
 
+	t.Run("PathIncludesRoomAndAncestors", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+		drawer := createContainer(t, repos, room, &toolbox.ID, "Drawer 1")
+		compartment := createContainer(t, repos, room, &drawer.ID, "Compartment")
+
+		path, err := repos.Containers.Path(ctx, compartment.ID)
+		requiresNoError(t, err, "Path")
+		if path.Room.ID != room.ID {
+			t.Fatalf("path room = %d, want %d", path.Room.ID, room.ID)
+		}
+		want := []string{"Toolbox", "Drawer 1", "Compartment"}
+		if got := containerNames(path.Containers); !slices.Equal(got, want) {
+			t.Fatalf("path containers = %v, want %v", got, want)
+		}
+		if got, want := path.String(), "Garage > Toolbox > Drawer 1 > Compartment"; got != want {
+			t.Fatalf("String() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("PathOfRootContainer", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+
+		path, err := repos.Containers.Path(t.Context(), toolbox.ID)
+		requiresNoError(t, err, "Path")
+		if got, want := path.String(), "Garage > Toolbox"; got != want {
+			t.Fatalf("String() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("PathUnknownContainer", func(t *testing.T) {
+		repos := newRepos(t)
+		_, err := repos.Containers.Path(t.Context(), 4242)
+		requiresError(t, err, inventory.ErrNotFound, "Path")
+	})
+
 	t.Run("UpdateRenamesAndReParents", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
@@ -236,6 +277,31 @@ func testContainers(t *testing.T, newRepos NewRepos) {
 		err := repos.Containers.Update(t.Context(), &container)
 		requiresError(t, err, inventory.ErrValidation, "Update with itself as parent")
 		requiresValidationProblem(t, err, "parent_id")
+	})
+
+	t.Run("UpdateRejectsCycles", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+		drawer := createContainer(t, repos, room, &toolbox.ID, "Drawer")
+		compartment := createContainer(t, repos, room, &drawer.ID, "Compartment")
+
+		toolbox.ParentID = &drawer.ID
+		requiresError(t, repos.Containers.Update(ctx, &toolbox), inventory.ErrCycle, "re-parent under a direct child")
+
+		toolbox.ParentID = &compartment.ID
+		requiresError(t, repos.Containers.Update(ctx, &toolbox), inventory.ErrCycle, "re-parent under a deeper descendant")
+
+		got, err := repos.Containers.Get(ctx, toolbox.ID)
+		requiresNoError(t, err, "Get")
+		if got.ParentID != nil {
+			t.Fatalf("ParentID = %d, want nil after refused updates", *got.ParentID)
+		}
+
+		toolbox.ParentID = nil
+		requiresNoError(t, repos.Containers.Update(ctx, &toolbox), "rename with the parent unchanged")
 	})
 
 	t.Run("DeleteEmptyContainer", func(t *testing.T) {

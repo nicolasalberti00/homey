@@ -64,13 +64,18 @@ func (r *roomRepo) Create(ctx context.Context, room *inventory.Room) error {
 
 // Get implements inventory.RoomRepo.
 func (r *roomRepo) Get(ctx context.Context, id inventory.RoomID) (inventory.Room, error) {
+	return getRoom(ctx, r.db, id)
+}
+
+// getRoom loads one room, mapping a missing row to ErrNotFound.
+func getRoom(ctx context.Context, q querier, id inventory.RoomID) (inventory.Room, error) {
 	var room inventory.Room
-	err := scanRoom(r.db.QueryRowContext(ctx, getRoomSQL, id), &room)
+	err := scanRoom(q.QueryRowContext(ctx, getRoomSQL, id), &room)
 	if errors.Is(err, sql.ErrNoRows) {
 		return inventory.Room{}, notFound("room", int64(id))
 	}
 	if err != nil {
-		return inventory.Room{}, fmt.Errorf("getting room %d: %w", id, err)
+		return inventory.Room{}, fmt.Errorf("loading room %d: %w", id, err)
 	}
 	return room, nil
 }

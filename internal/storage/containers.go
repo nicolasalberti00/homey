@@ -32,13 +32,36 @@ WHERE room_id = ?
 ORDER BY name COLLATE NOCASE, id`
 
 	updateContainerSQL = `
+WITH RECURSIVE ancestors(id) AS (
+SELECT ?
+UNION ALL
+SELECT c.parent_id
+FROM containers c
+JOIN ancestors a ON c.id = a.id
+WHERE c.parent_id IS NOT NULL
+)
 UPDATE containers
 SET parent_id = ?,
     name = ?,
     description = ?,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM ancestors WHERE id = ?)
 RETURNING id, room_id, parent_id, name, description, created_at, updated_at`
+
+	containerChainSQL = `
+WITH RECURSIVE chain(id, room_id, parent_id, name, description, created_at, updated_at, depth) AS (
+SELECT id, room_id, parent_id, name, description, created_at, updated_at, 0
+FROM containers
+WHERE id = ?
+UNION ALL
+SELECT c.id, c.room_id, c.parent_id, c.name, c.description, c.created_at, c.updated_at, chain.depth + 1
+FROM containers c
+JOIN chain ON c.id = chain.parent_id
+)
+SELECT id, room_id, parent_id, name, description, created_at, updated_at
+FROM chain
+ORDER BY depth DESC`
 
 	deleteContainerSQL = `DELETE FROM containers WHERE id = ?`
 
@@ -100,6 +123,36 @@ func (r *containerRepo) ListByRoom(ctx context.Context, roomID inventory.RoomID)
 	return queryContainers(ctx, r.db, listContainersByRoomSQL, roomID)
 }
 
+// Path implements inventory.ContainerRepo.
+func (r *containerRepo) Path(ctx context.Context, id inventory.ContainerID) (inventory.ContainerPath, error) {
+	rows, err := r.db.QueryContext(ctx, containerChainSQL, id)
+	if err != nil {
+		return inventory.ContainerPath{}, fmt.Errorf("loading path of container %d: %w", id, err)
+	}
+	defer rows.Close()
+
+	chain := make([]inventory.Container, 0, 4)
+	for rows.Next() {
+		var container inventory.Container
+		if err := scanContainer(rows, &container); err != nil {
+			return inventory.ContainerPath{}, err
+		}
+		chain = append(chain, container)
+	}
+	if err := rows.Err(); err != nil {
+		return inventory.ContainerPath{}, fmt.Errorf("loading path of container %d: %w", id, err)
+	}
+	if len(chain) == 0 {
+		return inventory.ContainerPath{}, notFound("container", int64(id))
+	}
+
+	room, err := getRoom(ctx, r.db, chain[0].RoomID)
+	if err != nil {
+		return inventory.ContainerPath{}, fmt.Errorf("loading room of container %d: %w", id, err)
+	}
+	return inventory.ContainerPath{Room: room, Containers: chain}, nil
+}
+
 // Update implements inventory.ContainerRepo.
 func (r *containerRepo) Update(ctx context.Context, container *inventory.Container) error {
 	container.Normalize()
@@ -123,9 +176,19 @@ func (r *containerRepo) Update(ctx context.Context, container *inventory.Contain
 				return err
 			}
 		}
+		// Parameters in statement order: the recursive seed (the new parent),
+		// the new values, the row to update and the ID the walk must not reach.
+		parentID := nullableContainerID(container.ParentID)
 		row := tx.QueryRowContext(ctx, updateContainerSQL,
-			nullableContainerID(container.ParentID), container.Name, container.Description, container.ID)
+			parentID, parentID, container.Name, container.Description, container.ID, container.ID)
 		if err := scanContainer(row, container); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// The container and the new parent were verified above, so the
+				// guarded UPDATE can only have matched nothing because the new
+				// parent sits inside the container's own subtree.
+				return fmt.Errorf("container %d cannot move under one of its own descendants: %w",
+					container.ID, inventory.ErrCycle)
+			}
 			if isUniqueViolation(err) {
 				return fmt.Errorf("a container named %q already exists in room %d: %w",
 					container.Name, container.RoomID, inventory.ErrConflict)

@@ -55,3 +55,21 @@ func TestSentinelErrorsAreDistinct(t *testing.T) {
 		}
 	}
 }
+
+func TestContainerPathStrings(t *testing.T) {
+	path := ContainerPath{
+		Room: Room{Name: "Garage"},
+		Containers: []Container{
+			{Name: "Toolbox"},
+			{Name: "Drawer 1"},
+		},
+	}
+	if got, want := path.String(), "Garage > Toolbox > Drawer 1"; got != want {
+		t.Fatalf("String() = %q, want %q", got, want)
+	}
+
+	roomOnly := ContainerPath{Room: Room{Name: "Garage"}}
+	if got, want := roomOnly.String(), "Garage"; got != want {
+		t.Fatalf("String() = %q, want %q", got, want)
+	}
+}
