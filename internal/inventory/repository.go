@@ -17,6 +17,9 @@ import "context"
 //     matching ErrNotFound.
 //   - State-dependent refusals (deleting a non-empty room or container) fail
 //     with an error matching ErrConflict.
+//   - Names are unique within their scope: a room name across the inventory,
+//     a container name within its room, an item name within its location.
+//     Duplicate names fail with ErrConflict; comparison is case-insensitive.
 //   - Listings are ordered by name, case-insensitively, then by ID, and
 //     return a non-nil empty slice when nothing matches.
 //   - Entities read from storage carry their ID and UTC timestamps.

@@ -105,6 +105,48 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		requiresError(t, repos.Items.Create(ctx, &inContainer), inventory.ErrNotFound, "Create in unknown container")
 	})
 
+	t.Run("CreateRejectsDuplicateNameInLocation", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		container := createContainer(t, repos, room, nil, "Toolbox")
+		createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+		createItem(t, repos, "Screws", inventory.ContainerLocation(container.ID))
+
+		inRoom := inventory.Item{Name: "drill", Quantity: 1, Location: inventory.RoomLocation(room.ID)}
+		requiresError(t, repos.Items.Create(ctx, &inRoom), inventory.ErrConflict, "Create duplicate name in a room")
+
+		inContainer := inventory.Item{Name: "SCREWS", Quantity: 1, Location: inventory.ContainerLocation(container.ID)}
+		requiresError(t, repos.Items.Create(ctx, &inContainer), inventory.ErrConflict, "Create duplicate name in a container")
+	})
+
+	t.Run("CreateAllowsSameNameInDifferentLocations", func(t *testing.T) {
+		repos := newRepos(t)
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		toolbox := createContainer(t, repos, garage, nil, "Toolbox")
+		shelf := createContainer(t, repos, kitchen, nil, "Shelf")
+
+		createItem(t, repos, "Cable", inventory.RoomLocation(garage.ID))
+		createItem(t, repos, "Cable", inventory.RoomLocation(kitchen.ID))
+		createItem(t, repos, "Cable", inventory.ContainerLocation(toolbox.ID))
+		createItem(t, repos, "Cable", inventory.ContainerLocation(shelf.ID))
+	})
+
+	t.Run("UpdateRejectsDuplicateNameInLocation", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		createItem(t, repos, "Cable", inventory.RoomLocation(garage.ID))
+		item := createItem(t, repos, "Cable", inventory.RoomLocation(kitchen.ID))
+
+		item.Location = inventory.RoomLocation(garage.ID)
+		requiresError(t, repos.Items.Update(ctx, &item), inventory.ErrConflict, "Move onto a duplicate name")
+	})
+
 	t.Run("GetUnknownItem", func(t *testing.T) {
 		repos := newRepos(t)
 		_, err := repos.Items.Get(t.Context(), 4242)

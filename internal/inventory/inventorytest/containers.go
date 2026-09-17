@@ -100,6 +100,40 @@ func testContainers(t *testing.T, newRepos NewRepos) {
 		requiresValidationProblem(t, err, "parent_id")
 	})
 
+	t.Run("CreateRejectsDuplicateNameInRoom", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		createContainer(t, repos, room, nil, "Toolbox")
+		shelf := createContainer(t, repos, room, nil, "Shelf")
+
+		duplicate := inventory.Container{RoomID: room.ID, Name: "toolbox"}
+		requiresError(t, repos.Containers.Create(ctx, &duplicate), inventory.ErrConflict, "Create duplicate name")
+
+		nested := inventory.Container{RoomID: room.ID, ParentID: &shelf.ID, Name: "TOOLBOX"}
+		requiresError(t, repos.Containers.Create(ctx, &nested), inventory.ErrConflict, "Create duplicate name at another depth")
+	})
+
+	t.Run("CreateAllowsSameNameInDifferentRooms", func(t *testing.T) {
+		repos := newRepos(t)
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+
+		createContainer(t, repos, garage, nil, "Toolbox")
+		createContainer(t, repos, kitchen, nil, "Toolbox")
+	})
+
+	t.Run("UpdateRejectsDuplicateNameInRoom", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		createContainer(t, repos, room, nil, "Toolbox")
+		shelf := createContainer(t, repos, room, nil, "Shelf")
+
+		shelf.Name = " Toolbox "
+		requiresError(t, repos.Containers.Update(t.Context(), &shelf), inventory.ErrConflict, "Update to a duplicate name")
+	})
+
 	t.Run("ListByRoomIsOrderedAndScoped", func(t *testing.T) {
 		repos := newRepos(t)
 		garage := createRoom(t, repos, "Garage")

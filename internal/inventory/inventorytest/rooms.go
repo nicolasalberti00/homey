@@ -67,6 +67,58 @@ func testRooms(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
+	t.Run("CreateRejectsDuplicateName", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		createRoom(t, repos, "Garage")
+		for _, name := range []string{"Garage", "garage", "  Garage  "} {
+			room := inventory.Room{Name: name}
+			requiresError(t, repos.Rooms.Create(ctx, &room), inventory.ErrConflict, "Create duplicate "+name)
+		}
+
+		rooms, err := repos.Rooms.List(ctx)
+		requiresNoError(t, err, "List")
+		if len(rooms) != 1 {
+			t.Fatalf("persisted %d rooms, want 1: %+v", len(rooms), rooms)
+		}
+	})
+
+	t.Run("UpdateRejectsDuplicateName", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		kitchen.Name = "garage"
+
+		requiresError(t, repos.Rooms.Update(ctx, &kitchen), inventory.ErrConflict, "Update to a duplicate name")
+
+		got, err := repos.Rooms.Get(ctx, kitchen.ID)
+		requiresNoError(t, err, "Get")
+		if got.Name != "Kitchen" {
+			t.Fatalf("stored name = %q, want Kitchen", got.Name)
+		}
+	})
+
+	t.Run("UpdateAcceptsTheStoredName", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		room.Description = "cars and tools"
+		requiresNoError(t, repos.Rooms.Update(ctx, &room), "Update with its own name")
+	})
+
+	t.Run("DeleteFreesTheName", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		requiresNoError(t, repos.Rooms.Delete(ctx, room.ID), "Delete")
+		createRoom(t, repos, "Garage")
+	})
+
 	t.Run("GetUnknownRoom", func(t *testing.T) {
 		repos := newRepos(t)
 		_, err := repos.Rooms.Get(t.Context(), 4242)

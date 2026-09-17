@@ -71,6 +71,10 @@ func (r *itemRepo) Create(ctx context.Context, item *inventory.Item) error {
 		row := tx.QueryRowContext(ctx, insertItemSQL,
 			roomID, containerID, item.Name, item.Description, item.Quantity, item.Notes)
 		if err := scanItem(row, item); err != nil {
+			if isUniqueViolation(err) {
+				return fmt.Errorf("an item named %q already exists at this location: %w",
+					item.Name, inventory.ErrConflict)
+			}
 			return fmt.Errorf("creating item: %w", err)
 		}
 		return nil
@@ -125,6 +129,10 @@ func (r *itemRepo) Update(ctx context.Context, item *inventory.Item) error {
 		err := scanItem(row, item)
 		if errors.Is(err, sql.ErrNoRows) {
 			return notFound("item", int64(item.ID))
+		}
+		if isUniqueViolation(err) {
+			return fmt.Errorf("an item named %q already exists at this location: %w",
+				item.Name, inventory.ErrConflict)
 		}
 		if err != nil {
 			return fmt.Errorf("updating item %d: %w", item.ID, err)

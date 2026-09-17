@@ -54,6 +54,9 @@ func (r *roomRepo) Create(ctx context.Context, room *inventory.Room) error {
 		return err
 	}
 	if err := scanRoom(r.db.QueryRowContext(ctx, insertRoomSQL, room.Name, room.Description), room); err != nil {
+		if isUniqueViolation(err) {
+			return fmt.Errorf("a room named %q already exists: %w", room.Name, inventory.ErrConflict)
+		}
 		return fmt.Errorf("creating room: %w", err)
 	}
 	return nil
@@ -86,6 +89,9 @@ func (r *roomRepo) Update(ctx context.Context, room *inventory.Room) error {
 	err := scanRoom(r.db.QueryRowContext(ctx, updateRoomSQL, room.Name, room.Description, room.ID), room)
 	if errors.Is(err, sql.ErrNoRows) {
 		return notFound("room", int64(room.ID))
+	}
+	if isUniqueViolation(err) {
+		return fmt.Errorf("a room named %q already exists: %w", room.Name, inventory.ErrConflict)
 	}
 	if err != nil {
 		return fmt.Errorf("updating room %d: %w", room.ID, err)

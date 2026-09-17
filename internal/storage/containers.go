@@ -69,6 +69,10 @@ func (r *containerRepo) Create(ctx context.Context, container *inventory.Contain
 		row := tx.QueryRowContext(ctx, insertContainerSQL,
 			container.RoomID, nullableContainerID(container.ParentID), container.Name, container.Description)
 		if err := scanContainer(row, container); err != nil {
+			if isUniqueViolation(err) {
+				return fmt.Errorf("a container named %q already exists in room %d: %w",
+					container.Name, container.RoomID, inventory.ErrConflict)
+			}
 			return fmt.Errorf("creating container: %w", err)
 		}
 		return nil
@@ -122,6 +126,10 @@ func (r *containerRepo) Update(ctx context.Context, container *inventory.Contain
 		row := tx.QueryRowContext(ctx, updateContainerSQL,
 			nullableContainerID(container.ParentID), container.Name, container.Description, container.ID)
 		if err := scanContainer(row, container); err != nil {
+			if isUniqueViolation(err) {
+				return fmt.Errorf("a container named %q already exists in room %d: %w",
+					container.Name, container.RoomID, inventory.ErrConflict)
+			}
 			return fmt.Errorf("updating container %d: %w", container.ID, err)
 		}
 		return nil

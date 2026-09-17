@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nicolasalberti00/homey/internal/inventory"
+	"modernc.org/sqlite"
 )
 
 // Repos bundles the SQLite implementations of the inventory repository
@@ -84,4 +85,23 @@ func parseTime(value string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("parsing timestamp %q: %w", value, err)
 	}
 	return ts.UTC(), nil
+}
+
+// SQLite constraint result codes.
+const (
+	sqliteConstraintPrimary = 19   // SQLITE_CONSTRAINT
+	sqliteConstraintUnique  = 2067 // SQLITE_CONSTRAINT_UNIQUE
+)
+
+// isUniqueViolation reports whether err is a SQLite uniqueness violation.
+// Domain validation rules out the other constraint kinds on these paths, so
+// the primary constraint code is accepted as a fallback for builds where
+// SQLite reports it instead of the extended code.
+func isUniqueViolation(err error) bool {
+	var sqlErr *sqlite.Error
+	if !errors.As(err, &sqlErr) {
+		return false
+	}
+	code := sqlErr.Code()
+	return code == sqliteConstraintUnique || code == sqliteConstraintPrimary
 }
