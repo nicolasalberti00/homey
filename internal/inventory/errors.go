@@ -62,3 +62,12 @@ func (e *ValidationError) orNil() error {
 	}
 	return e
 }
+
+// NewValidationError builds a *ValidationError carrying a single field
+// problem. Adapters use it to report rule violations only they can detect,
+// such as a container parent that lives in another room.
+func NewValidationError(field, problem string) error {
+	v := &ValidationError{}
+	v.add(field, problem)
+	return v
+}

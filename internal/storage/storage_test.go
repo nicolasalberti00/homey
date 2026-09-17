@@ -48,8 +48,8 @@ func TestMigrationVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrationVersion: %v", err)
 	}
-	if version != 2 || dirty {
-		t.Fatalf("version = %d dirty = %t, want 2/false", version, dirty)
+	if version != 3 || dirty {
+		t.Fatalf("version = %d dirty = %t, want 3/false", version, dirty)
 	}
 }
 
@@ -119,5 +119,39 @@ func TestDestructiveConfirmationConstraint(t *testing.T) {
 	}
 	if _, err := db.Exec(`INSERT INTO api_tokens (name, token_hash) VALUES ('ok', 'hash')`); err != nil {
 		t.Fatalf("default policy should be accepted: %v", err)
+	}
+}
+
+func TestUniqueNameConstraints(t *testing.T) {
+	db := openDB(t, mustMigrate(t))
+
+	mustExec(t, db, `INSERT INTO rooms (name) VALUES ('Garage')`)
+	if _, err := db.Exec(`INSERT INTO rooms (name) VALUES ('garage')`); err == nil {
+		t.Fatal("duplicate room name should be rejected case-insensitively")
+	}
+
+	mustExec(t, db, `INSERT INTO containers (room_id, name) VALUES (1, 'Toolbox')`)
+	if _, err := db.Exec(`INSERT INTO containers (room_id, name) VALUES (1, 'toolbox')`); err == nil {
+		t.Fatal("duplicate container name in the same room should be rejected")
+	}
+	mustExec(t, db, `INSERT INTO rooms (name) VALUES ('Kitchen')`)
+	if _, err := db.Exec(`INSERT INTO containers (room_id, name) VALUES (2, 'Toolbox')`); err != nil {
+		t.Fatalf("the same container name in another room should be accepted: %v", err)
+	}
+
+	mustExec(t, db, `INSERT INTO items (room_id, name) VALUES (1, 'Drill')`)
+	if _, err := db.Exec(`INSERT INTO items (room_id, name) VALUES (1, 'drill')`); err == nil {
+		t.Fatal("duplicate item name in the same room should be rejected")
+	}
+	mustExec(t, db, `INSERT INTO items (container_id, name) VALUES (1, 'Drill')`)
+	if _, err := db.Exec(`INSERT INTO items (container_id, name) VALUES (1, 'DRILL')`); err == nil {
+		t.Fatal("duplicate item name in the same container should be rejected")
+	}
+}
+
+func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
+	t.Helper()
+	if _, err := db.Exec(query, args...); err != nil {
+		t.Fatalf("exec %s: %v", query, err)
 	}
 }
