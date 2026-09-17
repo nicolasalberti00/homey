@@ -38,11 +38,24 @@ type Deps struct {
 
 // NewAPI mounts the /api/v1 REST API on mux and returns the Huma API.
 func NewAPI(mux *http.ServeMux, deps Deps) huma.API {
+	api := humago.NewWithPrefix(mux, "/api/v1", apiConfig())
+
+	RegisterRooms(api, deps)
+
+	return api
+}
+
+// apiConfig builds the Huma configuration. Both the real server and the
+// humatest-based handler tests use it, so tests exercise the same document
+// and response behavior as production.
+func apiConfig() huma.Config {
 	cfg := huma.DefaultConfig("homey API", apiVersion)
 	cfg.Info.Description = "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves."
 	cfg.OpenAPIPath = "/openapi"
 	cfg.DocsPath = "/docs"
 	cfg.Servers = []*huma.Server{{URL: "/api/v1", Description: "Versioned API root"}}
-
-	return humago.NewWithPrefix(mux, "/api/v1", cfg)
+	// Drop the default $schema-link hook: responses stay exactly the DTOs the
+	// transport declares, without injected fields or Link headers.
+	cfg.CreateHooks = nil
+	return cfg
 }
