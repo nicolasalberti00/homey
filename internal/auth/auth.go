@@ -125,16 +125,29 @@ func NewToken() (string, error) {
 // tokenPrefix marks generated tokens.
 const tokenPrefix = "homey_"
 
-// Hash returns the hex-encoded SHA-256 of a token: this is what gets stored.
+// hashPrefix versioning the stored hash: the format is "sha256:<hex>", so a
+// stronger scheme (for example Argon2id) can be introduced later without
+// invalidating existing tokens.
+const hashPrefix = "sha256:"
+
+// Hash returns the versioned hash of a token: this is what gets stored.
 func Hash(plaintext string) string {
 	sum := sha256.Sum256([]byte(plaintext))
-	return hex.EncodeToString(sum[:])
+	return hashPrefix + hex.EncodeToString(sum[:])
 }
 
 // Verify compares a presented plaintext token against a stored hash in
-// constant time.
-func Verify(plaintext, storedHash string) bool {
-	return subtle.ConstantTimeCompare([]byte(Hash(plaintext)), []byte(storedHash)) == 1
+// constant time. Bare hex hashes (without the version prefix) are accepted
+// for data written before the versioned format existed.
+func Verify(plaintext, stored string) bool {
+	stored = strings.TrimPrefix(stored, hashPrefix)
+	return subtle.ConstantTimeCompare([]byte(hashHex(plaintext)), []byte(stored)) == 1
+}
+
+// hashHex returns the raw hex digest of the token.
+func hashHex(plaintext string) string {
+	sum := sha256.Sum256([]byte(plaintext))
+	return hex.EncodeToString(sum[:])
 }
 
 // Validate checks the inputs of token creation.

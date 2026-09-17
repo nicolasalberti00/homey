@@ -8,6 +8,7 @@ package server
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -16,28 +17,45 @@ import (
 	"github.com/nicolasalberti00/homey/internal/auth"
 )
 
-// bearerAuth returns a Huma middleware that authenticates the request.
-// Authentication failures answer with the same RFC 9457 problem shape the
-// handlers use.
-func bearerAuth(tokens auth.Store) func(huma.Context, func(huma.Context)) {
+// bearerAuth returns a Huma middleware that authenticates the request: read
+// methods accept any valid token, mutating methods require the write scope.
+// Rejected attempts are logged for the audit trail: the residual risk is
+// online guessing, and it must be visible.
+func bearerAuth(tokens auth.Store, logger *slog.Logger) func(huma.Context, func(huma.Context)) {
 	return func(ctx huma.Context, next func(huma.Context)) {
 		plaintext, ok := bearerToken(ctx.Header("Authorization"))
 		if !ok {
+			logAuthFailure(logger, ctx, "missing or malformed bearer token")
 			writeAuthProblem(ctx, http.StatusUnauthorized, "missing or malformed bearer token")
 			return
 		}
 		token, found := tokens.Authenticate(ctx.Context(), auth.Hash(plaintext))
 		if !found {
+			logAuthFailure(logger, ctx, "invalid or revoked token")
 			writeAuthProblem(ctx, http.StatusUnauthorized, "invalid or revoked token")
 			return
 		}
 		if isWriteMethod(ctx.Method()) && !token.CanWrite() {
+			logAuthFailure(logger, ctx, "token without the write scope")
 			writeAuthProblem(ctx, http.StatusForbidden,
 				"this token only grants read access; use a token with the write scope")
 			return
 		}
 		next(ctx)
 	}
+}
+
+// logAuthFailure records one audit line per rejected authentication attempt.
+func logAuthFailure(logger *slog.Logger, ctx huma.Context, reason string) {
+	if logger == nil {
+		return
+	}
+	logger.Warn("authentication rejected",
+		"reason", reason,
+		"remote", ctx.RemoteAddr(),
+		"method", ctx.Method(),
+		"path", ctx.URL().Path,
+	)
 }
 
 // bearerToken extracts the plaintext token from the Authorization header.

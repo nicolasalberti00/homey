@@ -33,14 +33,21 @@ func TestHashAndVerify(t *testing.T) {
 		t.Fatalf("NewToken: %v", err)
 	}
 	hash := Hash(token)
-	if len(hash) != 64 { // hex-encoded SHA-256
-		t.Fatalf("hash = %q, want 64 hex characters", hash)
+	if !strings.HasPrefix(hash, "sha256:") {
+		t.Fatalf("hash = %q, want the sha256: version prefix", hash)
+	}
+	if len(hash) != len("sha256:")+64 { // 64 hex characters after the prefix
+		t.Fatalf("hash = %q, want sha256: + 64 hex characters", hash)
 	}
 	if Hash(token) != hash {
 		t.Fatal("hashing the same token twice produced different hashes")
 	}
 	if !Verify(token, hash) {
 		t.Fatal("Verify(token, hash) = false")
+	}
+	// Bare hex hashes (data written before the versioned format) still verify.
+	if !Verify(token, strings.TrimPrefix(hash, "sha256:")) {
+		t.Fatal("Verify should accept bare hex hashes")
 	}
 	if Verify("homey_wrong", hash) {
 		t.Fatal("Verify accepted a different token")

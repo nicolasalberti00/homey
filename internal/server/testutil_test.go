@@ -46,7 +46,7 @@ func newTestAPI(t *testing.T) (humatest.TestAPI, testTokens) {
 	}
 
 	_, api := humatest.New(t, apiConfig())
-	api.UseMiddleware(bearerAuth(store))
+	api.UseMiddleware(bearerAuth(store, logger))
 	registerOperations(api, Deps{Repos: storage.NewRepos(db), Tokens: store, Logger: logger})
 	return api, tokens
 }
