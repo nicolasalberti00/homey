@@ -16,6 +16,13 @@ Web UI. See `README.md` for the overview, configuration and roadmap.
 - Keep PRs small and focused; leave them for review — do not merge into `main`
   unless explicitly asked.
 
+## Conventions
+
+- SQL statements are constant strings with `?` placeholders, and user-provided
+  values are always passed as parameters. Never build SQL with concatenation or
+  `fmt.Sprintf`, and never let user input reach SQL identifiers (table/column
+  names): the guard test in `internal/storage` fails the build otherwise.
+
 ## Agent skills
 
 ### Issue tracker
