@@ -24,6 +24,8 @@ jobs:
         run: go vet ./...
       - name: tests
         run: go test ./...
+      - name: openapi artifact up to date
+        run: go run ./cmd/openapi > api/openapi.yaml && git diff --exit-code api/openapi.yaml
 
   container:
     name: container build
