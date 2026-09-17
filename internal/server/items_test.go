@@ -14,11 +14,11 @@ func itemPathID(id int64) string {
 }
 
 func TestItemLifecycle(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	room := createRoomViaAPI(t, api, "Garage")
+	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
 
-	rec := api.Post("/items", ItemInput{
+	rec := api.Post("/items", bearer.Write, ItemInput{
 		Name:        "  Drill  ",
 		Description: "  cordless  ",
 		Quantity:    2,
@@ -41,13 +41,13 @@ func TestItemLifecycle(t *testing.T) {
 	}
 
 	// Get.
-	rec = api.Get(itemPathID(created.ID))
+	rec = api.Get(itemPathID(created.ID), bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 
 	// List with no filter returns every item.
-	rec = api.Get("/items")
+	rec = api.Get("/items", bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -60,7 +60,7 @@ func TestItemLifecycle(t *testing.T) {
 	}
 
 	// List filtered by room.
-	rec = api.Get("/items?room_id=" + strconv.FormatInt(room.ID, 10))
+	rec = api.Get("/items?room_id="+strconv.FormatInt(room.ID, 10), bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -73,7 +73,7 @@ func TestItemLifecycle(t *testing.T) {
 
 	// Patch: change quantity and replace tags.
 	quantity := 3
-	rec = api.Patch(itemPathID(created.ID), ItemPatch{Quantity: &quantity, Tags: &[]string{"Officina"}})
+	rec = api.Patch(itemPathID(created.ID), bearer.Write, ItemPatch{Quantity: &quantity, Tags: &[]string{"Officina"}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -86,26 +86,26 @@ func TestItemLifecycle(t *testing.T) {
 	}
 
 	// Delete.
-	rec = api.Delete(itemPathID(created.ID))
+	rec = api.Delete(itemPathID(created.ID), bearer.Write)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	rec = api.Get(itemPathID(created.ID))
+	rec = api.Get(itemPathID(created.ID), bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404 after delete", rec.Code)
 	}
 }
 
 func TestItemMoveViaAPI(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	garage := createRoomViaAPI(t, api, "Garage")
-	kitchen := createRoomViaAPI(t, api, "Kitchen")
-	toolbox := createContainerViaAPI(t, api, garage.ID, nil, "Toolbox")
-	item := createItemViaAPI(t, api, LocationRef{Kind: "room", ID: garage.ID}, "Drill")
+	garage := createRoomViaAPI(t, api, bearer.Write, "Garage")
+	kitchen := createRoomViaAPI(t, api, bearer.Write, "Kitchen")
+	toolbox := createContainerViaAPI(t, api, bearer.Write, garage.ID, nil, "Toolbox")
+	item := createItemViaAPI(t, api, bearer.Write, LocationRef{Kind: "room", ID: garage.ID}, "Drill")
 
 	// Move into a container.
-	rec := api.Post(itemPathID(item.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "container", ID: toolbox.ID}})
+	rec := api.Post(itemPathID(item.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "container", ID: toolbox.ID}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -118,44 +118,44 @@ func TestItemMoveViaAPI(t *testing.T) {
 	}
 
 	// Move into another room.
-	rec = api.Post(itemPathID(item.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: kitchen.ID}})
+	rec = api.Post(itemPathID(item.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: kitchen.ID}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 
 	// Unknown destination: 404.
-	rec = api.Post(itemPathID(item.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: 4242}})
+	rec = api.Post(itemPathID(item.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: 4242}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
 	// Name collision at the destination: 409.
-	createItemViaAPI(t, api, LocationRef{Kind: "room", ID: garage.ID}, "Drill")
-	rec = api.Post(itemPathID(item.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: garage.ID}})
+	createItemViaAPI(t, api, bearer.Write, LocationRef{Kind: "room", ID: garage.ID}, "Drill")
+	rec = api.Post(itemPathID(item.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: garage.ID}})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409; body: %s", rec.Code, rec.Body.String())
 	}
 
 	// Unknown item: 404.
-	rec = api.Post(itemPathID(4242)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: garage.ID}})
+	rec = api.Post(itemPathID(4242)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: garage.ID}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
 
 func TestItemErrors(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	room := createRoomViaAPI(t, api, "Garage")
+	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
 
 	// Unknown location: 404.
-	rec := api.Post("/items", ItemInput{Name: "Drill", Quantity: 1, Location: LocationRef{Kind: "room", ID: 4242}})
+	rec := api.Post("/items", bearer.Write, ItemInput{Name: "Drill", Quantity: 1, Location: LocationRef{Kind: "room", ID: 4242}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
 	// Invalid location kind: 422 from the core.
-	rec = api.Post("/items", ItemInput{Name: "Drill", Quantity: 1, Location: LocationRef{Kind: "shelf", ID: 1}})
+	rec = api.Post("/items", bearer.Write, ItemInput{Name: "Drill", Quantity: 1, Location: LocationRef{Kind: "shelf", ID: 1}})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -166,7 +166,7 @@ func TestItemErrors(t *testing.T) {
 
 	// Negative quantity: 422 from the core (the schema allows it, the domain
 	// rules live in the inventory package).
-	rec = api.Post("/items", ItemInput{Name: "Drill", Quantity: -1, Location: LocationRef{Kind: "room", ID: room.ID}})
+	rec = api.Post("/items", bearer.Write, ItemInput{Name: "Drill", Quantity: -1, Location: LocationRef{Kind: "room", ID: room.ID}})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422", rec.Code)
 	}
@@ -176,42 +176,42 @@ func TestItemErrors(t *testing.T) {
 	}
 
 	// Duplicate name in the same location: 409.
-	createItemViaAPI(t, api, LocationRef{Kind: "room", ID: room.ID}, "Cable")
-	rec = api.Post("/items", ItemInput{Name: "cable", Quantity: 1, Location: LocationRef{Kind: "room", ID: room.ID}})
+	createItemViaAPI(t, api, bearer.Write, LocationRef{Kind: "room", ID: room.ID}, "Cable")
+	rec = api.Post("/items", bearer.Write, ItemInput{Name: "cable", Quantity: 1, Location: LocationRef{Kind: "room", ID: room.ID}})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", rec.Code)
 	}
 
 	// Unknown item: 404 on get/patch/delete/move.
-	rec = api.Get(itemPathID(4242))
+	rec = api.Get(itemPathID(4242), bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 	name := "Box"
-	rec = api.Patch(itemPathID(4242), ItemPatch{Name: &name})
+	rec = api.Patch(itemPathID(4242), bearer.Write, ItemPatch{Name: &name})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	rec = api.Delete(itemPathID(4242))
+	rec = api.Delete(itemPathID(4242), bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	rec = api.Post(itemPathID(4242)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: room.ID}})
+	rec = api.Post(itemPathID(4242)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: room.ID}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
 	// Both location filters at once: 422.
-	rec = api.Get("/items?room_id=1&container_id=1")
+	rec = api.Get("/items?room_id=1&container_id=1", bearer.Write)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
 }
 
 // createItemViaAPI is a test helper creating an item through the API.
-func createItemViaAPI(t *testing.T, api humatest.TestAPI, location LocationRef, name string) ItemResponse {
+func createItemViaAPI(t *testing.T, api humatest.TestAPI, bearer string, location LocationRef, name string) ItemResponse {
 	t.Helper()
-	rec := api.Post("/items", ItemInput{Name: name, Quantity: 1, Location: location})
+	rec := api.Post("/items", bearer, ItemInput{Name: name, Quantity: 1, Location: location})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("creating item %q: status = %d, body: %s", name, rec.Code, rec.Body.String())
 	}

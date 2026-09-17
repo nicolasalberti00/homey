@@ -372,7 +372,7 @@ components:
       additionalProperties: false
       type: object
 info:
-  description: "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves."
+  description: "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves. All operations require a bearer token except this document, the docs UI and the schemas."
   title: homey API
   version: 0.1.0
 openapi: 3.1.0
