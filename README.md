@@ -16,7 +16,14 @@ docker compose up -d
 curl http://localhost:8080/healthz
 ```
 
-Data lives in `./data` (SQLite). To build for a specific architecture
+Data lives in `./data` (SQLite). On Linux hosts make sure the directory is
+writable by uid 1000 (the container user):
+
+```bash
+mkdir -p data && sudo chown 1000:1000 data
+```
+
+To build for a specific architecture
 (amd64/arm64):
 
 ```bash
