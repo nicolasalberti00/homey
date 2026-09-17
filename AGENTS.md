@@ -5,6 +5,17 @@
 homey — self-hosted home inventory: Go + SQLite core, REST API, MCP server,
 Web UI. See `README.md` for the overview, configuration and roadmap.
 
+## Development workflow
+
+- `main` is always green and releasable; never commit or push directly to it.
+- One unit of work (typically a roadmap step) per branch, named `feat/…`, `fix/…`,
+  `chore/…`, `ci/…` or `docs/…` (e.g. `feat/phase-2-domain-types`).
+- When the work is complete (`gofmt`, `go vet` and `go test ./...` green), push the
+  branch and open a pull request with `gh pr create` describing the step and its
+  exit criteria.
+- Keep PRs small and focused; leave them for review — do not merge into `main`
+  unless explicitly asked.
+
 ## Agent skills
 
 ### Issue tracker
