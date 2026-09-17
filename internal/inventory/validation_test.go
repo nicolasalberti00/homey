@@ -173,6 +173,33 @@ func TestLocationValidate(t *testing.T) {
 	assertProblem(t, (Location{Kind: LocationRoom, ID: 0}).Validate(), "location.id")
 }
 
+func TestNamesAcceptSpecialCharactersAndUnicode(t *testing.T) {
+	names := []string{
+		`Càssetto "attrezzi"`,
+		"Nicolas's drill",
+		"Trapano a batteria — 18V",
+		"🧰 Toolbox",
+		"50% cotone / 50% lino",
+		"<script>alert(1)</script>", // stored verbatim; output escaping is the UI's job
+		"ドリル",
+	}
+	for _, name := range names {
+		if err := (&Room{Name: name}).Validate(); err != nil {
+			t.Errorf("name %q should be accepted: %v", name, err)
+		}
+	}
+}
+
+func TestNameLengthCountsRunesNotBytes(t *testing.T) {
+	for _, char := range []string{"é", "🧰", "日"} { // 2, 4 and 3 bytes each
+		name := strings.Repeat(char, MaxNameLen)
+		if err := (&Room{Name: name}).Validate(); err != nil {
+			t.Errorf("%s x%d should be accepted: %v", char, MaxNameLen, err)
+		}
+		assertProblem(t, (&Room{Name: name + char}).Validate(), "name")
+	}
+}
+
 func TestValidationErrorMessage(t *testing.T) {
 	err := (&ValidationError{Problems: []FieldProblem{{Field: "name", Problem: "must not be empty"}}}).Error()
 	if !strings.Contains(err, "name") || !strings.Contains(err, "must not be empty") {

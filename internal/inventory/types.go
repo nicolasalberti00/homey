@@ -48,15 +48,22 @@ type Item struct {
 	UpdatedAt   time.Time
 }
 
-// LocationKind distinguishes the two kinds of item location.
-type LocationKind uint8
+// LocationKind distinguishes the two kinds of item location. It is a string
+// enum so it stays self-describing in JSON, OpenAPI and MCP tool schemas.
+type LocationKind string
 
 const (
 	// LocationRoom means the item sits directly in a room.
-	LocationRoom LocationKind = iota + 1
+	LocationRoom LocationKind = "room"
 	// LocationContainer means the item sits inside a container.
-	LocationContainer
+	LocationContainer LocationKind = "container"
 )
+
+// Valid reports whether k is a known location kind. The zero value is not
+// valid, so a Location must be built with RoomLocation or ContainerLocation.
+func (k LocationKind) Valid() bool {
+	return k == LocationRoom || k == LocationContainer
+}
 
 // Location says where an item lives: a room or a container. Exactly one of
 // the two kinds is set; build one with RoomLocation or ContainerLocation.

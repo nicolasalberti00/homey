@@ -108,9 +108,7 @@ func validateLength(v *ValidationError, field, value string, max int) {
 }
 
 func validateLocation(v *ValidationError, field string, l Location) {
-	switch l.Kind {
-	case LocationRoom, LocationContainer:
-	default:
+	if !l.Kind.Valid() {
 		v.add(field+".kind", "must be a room or a container location")
 		return
 	}

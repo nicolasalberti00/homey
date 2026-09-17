@@ -1,6 +1,9 @@
 package inventory
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestLocationConstructorsAndAccessors(t *testing.T) {
 	room := RoomLocation(7)
@@ -23,6 +26,22 @@ func TestLocationConstructorsAndAccessors(t *testing.T) {
 	}
 	if _, ok := container.RoomID(); ok {
 		t.Fatal("RoomID() should be false for a container location")
+	}
+}
+
+func TestLocationKindIsASelfDescribingStringEnum(t *testing.T) {
+	encoded, err := json.Marshal(LocationRoom)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if string(encoded) != `"room"` {
+		t.Fatalf("LocationRoom marshals to %s, want \"room\"", encoded)
+	}
+	if !LocationRoom.Valid() || !LocationContainer.Valid() {
+		t.Fatal("known location kinds must be valid")
+	}
+	if LocationKind("").Valid() || LocationKind("basket").Valid() {
+		t.Fatal("unknown location kinds must be invalid")
 	}
 }
 
