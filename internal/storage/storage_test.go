@@ -48,8 +48,8 @@ func TestMigrationVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrationVersion: %v", err)
 	}
-	if version != 4 || dirty {
-		t.Fatalf("version = %d dirty = %t, want 4/false", version, dirty)
+	if version != 5 || dirty {
+		t.Fatalf("version = %d dirty = %t, want 5/false", version, dirty)
 	}
 }
 

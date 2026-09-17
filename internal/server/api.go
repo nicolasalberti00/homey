@@ -45,7 +45,7 @@ func NewAPI(mux *http.ServeMux, deps Deps) huma.API {
 	// Authentication wraps every registered operation; the spec, the docs UI
 	// and the schemas are registered as raw routes and stay public.
 	if deps.Tokens != nil {
-		api.UseMiddleware(bearerAuth(deps.Tokens))
+		api.UseMiddleware(bearerAuth(deps.Tokens, deps.Logger))
 	}
 	registerOperations(api, deps)
 
