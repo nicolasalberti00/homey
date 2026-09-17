@@ -40,9 +40,18 @@ type Deps struct {
 func NewAPI(mux *http.ServeMux, deps Deps) huma.API {
 	api := humago.NewWithPrefix(mux, "/api/v1", apiConfig())
 
-	RegisterRooms(api, deps)
+	registerOperations(api, deps)
 
 	return api
+}
+
+// registerOperations attaches every API surface to the Huma API. The list is
+// the single place where the transport knows which operations exist.
+func registerOperations(api huma.API, deps Deps) {
+	RegisterRooms(api, deps)
+	RegisterContainers(api, deps)
+	RegisterItems(api, deps)
+	RegisterSearch(api, deps)
 }
 
 // apiConfig builds the Huma configuration. Both the real server and the

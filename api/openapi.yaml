@@ -1,5 +1,120 @@
 components:
   schemas:
+    ContainerDetail:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        description:
+          type: string
+        id:
+          description: Container ID.
+          format: int64
+          type: integer
+        name:
+          examples:
+            - Toolbox
+          type: string
+        parent_id:
+          description: ID of the containing container, or empty when the container sits directly in the room.
+          format: int64
+          type: integer
+        path:
+          description: "Location of the container: room and containers from the top down."
+          examples:
+            - Garage > Toolbox > Drawer 1
+          type: string
+        room_id:
+          description: ID of the room the container belongs to.
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - path
+        - id
+        - room_id
+        - name
+        - description
+        - created_at
+        - updated_at
+      type: object
+    ContainerInput:
+      additionalProperties: false
+      properties:
+        description:
+          description: Optional description of the container.
+          maxLength: 2000
+          type: string
+        name:
+          description: Name of the container, unique within its room.
+          examples:
+            - Toolbox
+          maxLength: 120
+          minLength: 1
+          type: string
+        parent_id:
+          description: ID of the containing container, or empty when the container sits directly in the room.
+          format: int64
+          type: integer
+        room_id:
+          description: ID of the room the container sits in.
+          format: int64
+          type: integer
+      required:
+        - name
+        - room_id
+      type: object
+    ContainerPatch:
+      additionalProperties: false
+      properties:
+        description:
+          description: New description of the container.
+          maxLength: 2000
+          type: string
+        name:
+          description: New name of the container.
+          maxLength: 120
+          minLength: 1
+          type: string
+      type: object
+    ContainerResponse:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        description:
+          type: string
+        id:
+          description: Container ID.
+          format: int64
+          type: integer
+        name:
+          examples:
+            - Toolbox
+          type: string
+        parent_id:
+          description: ID of the containing container, or empty when the container sits directly in the room.
+          format: int64
+          type: integer
+        room_id:
+          description: ID of the room the container belongs to.
+          format: int64
+          type: integer
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - id
+        - room_id
+        - name
+        - description
+        - created_at
+        - updated_at
+      type: object
     ErrorDetail:
       additionalProperties: false
       properties:
@@ -51,6 +166,147 @@ components:
             - https://example.com/errors/example
           format: uri
           type: string
+      type: object
+    ItemInput:
+      additionalProperties: false
+      properties:
+        description:
+          description: Optional description of the item.
+          maxLength: 2000
+          type: string
+        location:
+          $ref: "#/components/schemas/LocationRef"
+          description: Where the item lives.
+        name:
+          description: Name of the item, unique within its location.
+          examples:
+            - Drill
+          maxLength: 120
+          minLength: 1
+          type: string
+        notes:
+          description: Optional free-form notes.
+          maxLength: 4000
+          type: string
+        quantity:
+          description: How many of the item exist; zero means none left.
+          format: int64
+          maximum: 1000000
+          minimum: 0
+          type: integer
+        tags:
+          description: Free-form labels, unique within the item.
+          items:
+            type: string
+          maxItems: 20
+          type:
+            - array
+            - "null"
+      required:
+        - name
+        - quantity
+        - location
+      type: object
+    ItemPatch:
+      additionalProperties: false
+      properties:
+        description:
+          description: New description of the item.
+          maxLength: 2000
+          type: string
+        name:
+          description: New name of the item.
+          maxLength: 120
+          minLength: 1
+          type: string
+        notes:
+          description: New notes.
+          maxLength: 4000
+          type: string
+        quantity:
+          description: New quantity.
+          format: int64
+          maximum: 1000000
+          minimum: 0
+          type: integer
+        tags:
+          description: New tag set, replacing the existing one.
+          items:
+            type: string
+          maxItems: 20
+          type: array
+      type: object
+    ItemResponse:
+      additionalProperties: false
+      properties:
+        created_at:
+          format: date-time
+          type: string
+        description:
+          type: string
+        id:
+          description: Item ID.
+          format: int64
+          type: integer
+        location:
+          $ref: "#/components/schemas/LocationRef"
+          description: Where the item lives.
+        name:
+          examples:
+            - Drill
+          type: string
+        notes:
+          type: string
+        quantity:
+          examples:
+            - 1
+          format: int64
+          type: integer
+        tags:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        updated_at:
+          format: date-time
+          type: string
+      required:
+        - id
+        - name
+        - description
+        - quantity
+        - notes
+        - tags
+        - location
+        - created_at
+        - updated_at
+      type: object
+    LocationRef:
+      additionalProperties: false
+      properties:
+        id:
+          description: ID of the room or the container.
+          format: int64
+          type: integer
+        kind:
+          description: Whether the location is a room or a container.
+          enum:
+            - room
+            - container
+          type: string
+      required:
+        - kind
+        - id
+      type: object
+    MoveBody:
+      additionalProperties: false
+      properties:
+        destination:
+          $ref: "#/components/schemas/LocationRef"
+          description: Where to move the entity.
+      required:
+        - destination
       type: object
     RoomInput:
       additionalProperties: false
@@ -112,12 +368,366 @@ components:
         - created_at
         - updated_at
       type: object
+    SearchOutputBody:
+      additionalProperties: false
+      type: object
 info:
   description: "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves."
   title: homey API
   version: 0.1.0
 openapi: 3.1.0
 paths:
+  /containers:
+    get:
+      operationId: list-containers
+      parameters:
+        - description: List the containers of this room, at any nesting depth.
+          explode: false
+          in: query
+          name: room_id
+          schema:
+            description: List the containers of this room, at any nesting depth.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ContainerResponse"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List the containers of a room
+      tags:
+        - Containers
+    post:
+      operationId: create-container
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContainerInput"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerResponse"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create a container
+      tags:
+        - Containers
+  /containers/{id}:
+    delete:
+      operationId: delete-container
+      parameters:
+        - description: Container ID.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Container ID.
+            format: int64
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete an empty container
+      tags:
+        - Containers
+    get:
+      operationId: get-container
+      parameters:
+        - description: Container ID.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Container ID.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerDetail"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get a container
+      tags:
+        - Containers
+    patch:
+      operationId: update-container
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: int64
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContainerPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update a container
+      tags:
+        - Containers
+  /containers/{id}/move:
+    post:
+      description: The destination is a room (the container becomes a root of that room) or a container (it becomes a child of it and the whole subtree adopts its room). The move is atomic.
+      operationId: move-container
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: int64
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContainerDetail"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Move a container and its subtree
+      tags:
+        - Containers
+  /items:
+    get:
+      description: With no filter every item is listed. At most one of room_id and container_id may be set.
+      operationId: list-items
+      parameters:
+        - description: Only items directly in this room. Zero lists every location.
+          explode: false
+          in: query
+          name: room_id
+          schema:
+            description: Only items directly in this room. Zero lists every location.
+            format: int64
+            type: integer
+        - description: Only items directly in this container. Zero lists every location.
+          explode: false
+          in: query
+          name: container_id
+          schema:
+            description: Only items directly in this container. Zero lists every location.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ItemResponse"
+                type:
+                  - array
+                  - "null"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: List items
+      tags:
+        - Items
+    post:
+      operationId: create-item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemInput"
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+          description: Created
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Create an item
+      tags:
+        - Items
+  /items/{id}:
+    delete:
+      operationId: delete-item
+      parameters:
+        - description: Item ID.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Item ID.
+            format: int64
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Delete an item
+      tags:
+        - Items
+    get:
+      operationId: get-item
+      parameters:
+        - description: Item ID.
+          in: path
+          name: id
+          required: true
+          schema:
+            description: Item ID.
+            format: int64
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Get an item
+      tags:
+        - Items
+    patch:
+      operationId: update-item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: int64
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ItemPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Update an item
+      tags:
+        - Items
+  /items/{id}/move:
+    post:
+      description: The destination is a room or a container; only the location changes.
+      operationId: move-item
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: int64
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveBody"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemResponse"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Move an item
+      tags:
+        - Items
   /rooms:
     get:
       operationId: list-rooms
@@ -247,6 +857,38 @@ paths:
       summary: Update a room
       tags:
         - Rooms
+  /search:
+    get:
+      description: "Not implemented yet: the query is accepted and the endpoint answers with 501 until Phase 5 delivers it."
+      operationId: search
+      parameters:
+        - description: Free-text query.
+          explode: false
+          in: query
+          name: q
+          required: true
+          schema:
+            description: Free-text query.
+            examples:
+              - trapano
+            minLength: 1
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchOutputBody"
+          description: OK
+        default:
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ErrorModel"
+          description: Error
+      summary: Search the inventory
+      tags:
+        - Search
 servers:
   - description: Versioned API root
     url: /api/v1
