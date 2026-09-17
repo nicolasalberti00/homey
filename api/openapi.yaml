@@ -1,0 +1,13 @@
+openapi: 3.1.0
+info:
+  title: homey API
+  description: |
+    REST API for homey, the self-hosted home inventory.
+
+    This file is the source of truth for the API contract. Endpoints are
+    added in Phase 3 of the roadmap; the schema grows endpoint by endpoint.
+  version: 0.1.0
+servers:
+  - url: /api/v1
+    description: Versioned API root
+paths: {}

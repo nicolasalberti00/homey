@@ -1,0 +1,22 @@
+# build artifacts
+/homey
+/dist/
+
+# local data (SQLite database)
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# web UI build output (Phase 4)
+web/node_modules/
+web/dist/
+
+# environment files
+.env
+
+# local agent context overrides (personal, never commit)
+AGENTS.override.md
+
+# macOS
+.DS_Store

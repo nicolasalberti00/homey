@@ -1,0 +1,81 @@
+# homey
+
+Self-hosted, platform-independent home inventory: keep track of objects by
+room and location, manage them from a Web UI and interact with them through
+LLMs via MCP. No cloud account, no external database, no mandatory AI
+provider.
+
+> **Status: Phase 1 (foundation).** The repository has configuration, SQLite
+> with migrations, health endpoints and a Docker deployment. Inventory
+> features are not implemented yet.
+
+## Quickstart (Docker)
+
+```bash
+docker compose up -d
+curl http://localhost:8080/healthz
+```
+
+Data lives in `./data` (SQLite). To build for a specific architecture
+(amd64/arm64):
+
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t homey:dev .
+```
+
+## Configuration
+
+Every setting can be provided as an environment variable and as a flag;
+flags take precedence.
+
+| Env var              | Flag             | Default               | Description                          |
+| -------------------- | ---------------- | --------------------- | ------------------------------------ |
+| `HOMEY_LISTEN`       | `--listen`       | `:8080`               | HTTP listen address                  |
+| `HOMEY_DATA_DIR`     | `--data-dir`     | `./data`              | Directory for persistent data        |
+| `HOMEY_DB_PATH`      | `--db`           | `<data-dir>/homey.db` | SQLite database file                 |
+| `HOMEY_LOG_LEVEL`    | `--log-level`    | `info`                | debug, info, warn, error             |
+| `HOMEY_LOG_FORMAT`   | `--log-format`   | `text`                | text or json                         |
+| `HOMEY_CORS_ORIGINS` | `--cors-origins` | *(empty)*             | Comma-separated allowed CORS origins |
+| `HOMEY_MCP_ENABLED`  | `--mcp`          | `true`                | Enable the MCP endpoint (Phase 6)    |
+
+## Endpoints (so far)
+
+- `GET /healthz` — liveness
+- `GET /readyz` — readiness (pings the database)
+
+The REST API under `/api/v1/` arrives in Phase 3; the OpenAPI contract lives
+in [`api/openapi.yaml`](api/openapi.yaml).
+
+## Development
+
+```bash
+go build ./...
+go test ./...
+go run ./cmd/server serve --listen 127.0.0.1:8080
+```
+
+Migrations run automatically at start-up. Operational helpers:
+
+```bash
+go run ./cmd/server migrate version
+go run ./cmd/server migrate up
+go run ./cmd/server migrate down
+go run ./cmd/server migrate force <version>
+```
+
+`force` is the escape hatch for a dirty migration state (for example
+`force -1` resets the version).
+
+## Roadmap
+
+1. Foundations — repo, configuration, SQLite, migrations, Docker ✅
+2. Inventory core — rooms, containers, items, move, validation
+3. REST API — OpenAPI, auth, tests
+4. Web UI — dashboard, rooms, containers, items, search, themes
+5. Search — aliases, tags, ranking, ambiguity handling
+6. MCP — tool registry, read/write tools, confirmation flow
+7. Hardening — audit events, security review, export/import, docs
+
+## License
+
+MIT — see [LICENSE](LICENSE).
