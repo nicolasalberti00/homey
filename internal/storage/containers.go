@@ -65,6 +65,32 @@ ORDER BY depth DESC`
 
 	deleteContainerSQL = `DELETE FROM containers WHERE id = ?`
 
+	moveContainerSQL = `
+WITH RECURSIVE subtree(id) AS (
+SELECT ?
+UNION ALL
+SELECT c.id
+FROM containers c
+JOIN subtree s ON c.parent_id = s.id
+)
+UPDATE containers
+SET room_id = ?,
+    parent_id = CASE WHEN id = ? THEN ? ELSE parent_id END,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id IN (SELECT id FROM subtree)
+RETURNING id`
+
+	containerAncestorWalkSQL = `
+WITH RECURSIVE walk(id) AS (
+SELECT ?
+UNION ALL
+SELECT c.parent_id
+FROM containers c
+JOIN walk w ON c.id = w.id
+WHERE c.parent_id IS NOT NULL
+)
+SELECT EXISTS (SELECT 1 FROM walk WHERE id = ?)`
+
 	containerExistsSQL = `SELECT 1 FROM containers WHERE id = ?`
 
 	containerRoomSQL = `SELECT room_id FROM containers WHERE id = ?`
@@ -194,6 +220,70 @@ func (r *containerRepo) Update(ctx context.Context, container *inventory.Contain
 					container.Name, container.RoomID, inventory.ErrConflict)
 			}
 			return fmt.Errorf("updating container %d: %w", container.ID, err)
+		}
+		return nil
+	})
+}
+
+// Move implements inventory.ContainerRepo.
+func (r *containerRepo) Move(ctx context.Context, id inventory.ContainerID, destination inventory.Location) error {
+	if err := destination.Validate(); err != nil {
+		return err
+	}
+	return withTx(ctx, r.db, func(tx *sql.Tx) error {
+		var currentRoom inventory.RoomID
+		err := tx.QueryRowContext(ctx, containerRoomSQL, id).Scan(&currentRoom)
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("container", int64(id))
+		}
+		if err != nil {
+			return fmt.Errorf("loading container %d: %w", id, err)
+		}
+
+		var newRoom inventory.RoomID
+		var newParent any
+		switch destination.Kind {
+		case inventory.LocationRoom:
+			if err := requireRoom(ctx, tx, inventory.RoomID(destination.ID)); err != nil {
+				return err
+			}
+			newRoom = inventory.RoomID(destination.ID)
+		case inventory.LocationContainer:
+			destinationID := inventory.ContainerID(destination.ID)
+			var destinationRoom inventory.RoomID
+			err := tx.QueryRowContext(ctx, containerRoomSQL, destinationID).Scan(&destinationRoom)
+			if errors.Is(err, sql.ErrNoRows) {
+				return notFound("destination container", int64(destinationID))
+			}
+			if err != nil {
+				return fmt.Errorf("loading container %d: %w", destinationID, err)
+			}
+			// The destination must not sit inside the moved subtree. The walk
+			// runs as its own statement inside the transaction, so it reads
+			// the pre-move tree and cannot interact with the UPDATE below.
+			var inCycle int
+			if err := tx.QueryRowContext(ctx, containerAncestorWalkSQL, destinationID, id).Scan(&inCycle); err != nil {
+				return fmt.Errorf("checking cycle for container %d: %w", id, err)
+			}
+			if inCycle == 1 {
+				return fmt.Errorf("container %d cannot move under container %d, which is the container itself or one of its descendants: %w",
+					id, destinationID, inventory.ErrCycle)
+			}
+			newRoom = destinationRoom
+			newParent = int64(destinationID)
+		default:
+			return inventory.NewValidationError("destination.kind", "must be a room or a container location")
+		}
+
+		// One statement moves the container and every descendant into the
+		// destination room and re-parents the container itself.
+		var moved int64
+		err = tx.QueryRowContext(ctx, moveContainerSQL, id, newRoom, id, newParent).Scan(&moved)
+		if err != nil {
+			if isUniqueViolation(err) {
+				return fmt.Errorf("the destination room already holds one of the moved container names: %w", inventory.ErrConflict)
+			}
+			return fmt.Errorf("moving container %d: %w", id, err)
 		}
 		return nil
 	})

@@ -25,6 +25,8 @@ import "context"
 //   - Item tags are trimmed, case-insensitively unique within their item,
 //     limited to MaxTagsPerItem tags of MaxTagLen characters, and returned
 //     ordered case-insensitively.
+//   - Move changes only the location: an item keeps every other field, and a
+//     container carries its whole subtree into the destination room.
 //   - Listings are ordered by name, case-insensitively, then by ID, and
 //     return a non-nil empty slice when nothing matches.
 //   - Entities read from storage carry their ID and UTC timestamps.
@@ -68,6 +70,13 @@ type ContainerRepo interface {
 	// ErrCycle when the new parent is the container itself or one of its
 	// descendants.
 	Update(ctx context.Context, container *Container) error
+	// Move relocates the container and its whole subtree atomically: a room
+	// destination makes it a root of that room, a container destination makes
+	// it a child of that container and the subtree adopts its room. It fails
+	// with ErrCycle when the destination is the container itself or one of
+	// its descendants, and with ErrConflict when a name would collide in the
+	// destination room.
+	Move(ctx context.Context, id ContainerID, destination Location) error
 	// Delete removes a container that has no child containers and no items.
 	// It fails with ErrConflict otherwise.
 	Delete(ctx context.Context, id ContainerID) error
@@ -88,6 +97,11 @@ type ItemRepo interface {
 	// Update replaces the stored fields of item, including its location, and
 	// refreshes its updated timestamp.
 	Update(ctx context.Context, item *Item) error
+	// Move relocates the item to another room or container without touching
+	// its other fields. The destination must reference an existing room or
+	// container; when an item with the same name already lives there the move
+	// fails with ErrConflict.
+	Move(ctx context.Context, id ItemID, destination Location) error
 	// Delete removes the item.
 	Delete(ctx context.Context, id ItemID) error
 }
