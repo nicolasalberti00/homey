@@ -250,6 +250,98 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
+	t.Run("MoveToAnotherRoom", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		item := inventory.Item{
+			Name:     "Drill",
+			Quantity: 2,
+			Notes:    "cordless",
+			Location: inventory.RoomLocation(garage.ID),
+			Tags:     []string{"Strumenti"},
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &item), "Create")
+
+		requiresNoError(t, repos.Items.Move(ctx, item.ID, inventory.RoomLocation(kitchen.ID)), "Move")
+
+		got, err := repos.Items.Get(ctx, item.ID)
+		requiresNoError(t, err, "Get")
+		if !got.Location.IsRoom() || got.Location.ID != int64(kitchen.ID) {
+			t.Fatalf("location after move = %+v, want room %d", got.Location, kitchen.ID)
+		}
+		if got.Name != "Drill" || got.Quantity != 2 || got.Notes != "cordless" || !slices.Equal(got.Tags, []string{"Strumenti"}) {
+			t.Fatalf("move changed other fields: %+v", got)
+		}
+
+		inGarage, err := repos.Items.ListByLocation(ctx, inventory.RoomLocation(garage.ID))
+		requiresNoError(t, err, "ListByLocation garage")
+		if len(inGarage) != 0 {
+			t.Fatalf("item stayed in the old room: %+v", inGarage)
+		}
+		inKitchen, err := repos.Items.ListByLocation(ctx, inventory.RoomLocation(kitchen.ID))
+		requiresNoError(t, err, "ListByLocation kitchen")
+		if len(inKitchen) != 1 {
+			t.Fatalf("item missing from the new room: %+v", inKitchen)
+		}
+	})
+
+	t.Run("MoveIntoContainer", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+		item := createItem(t, repos, "Screwdriver", inventory.RoomLocation(room.ID))
+
+		requiresNoError(t, repos.Items.Move(ctx, item.ID, inventory.ContainerLocation(toolbox.ID)), "Move")
+
+		got, err := repos.Items.Get(ctx, item.ID)
+		requiresNoError(t, err, "Get")
+		if !got.Location.IsContainer() || got.Location.ID != int64(toolbox.ID) {
+			t.Fatalf("location after move = %+v, want container %d", got.Location, toolbox.ID)
+		}
+	})
+
+	t.Run("MoveRejectsUnknownDestination", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+
+		requiresError(t, repos.Items.Move(ctx, item.ID, inventory.RoomLocation(4242)), inventory.ErrNotFound, "Move to unknown room")
+		requiresError(t, repos.Items.Move(ctx, item.ID, inventory.ContainerLocation(4242)), inventory.ErrNotFound, "Move to unknown container")
+	})
+
+	t.Run("MoveUnknownItem", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		requiresError(t, repos.Items.Move(t.Context(), 4242, inventory.RoomLocation(room.ID)), inventory.ErrNotFound, "Move")
+	})
+
+	t.Run("MoveRejectsNameCollisionAtDestination", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		createItem(t, repos, "Cable", inventory.RoomLocation(kitchen.ID))
+		item := createItem(t, repos, "Cable", inventory.RoomLocation(garage.ID))
+
+		requiresError(t, repos.Items.Move(ctx, item.ID, inventory.RoomLocation(kitchen.ID)), inventory.ErrConflict, "Move onto a duplicate name")
+	})
+
+	t.Run("MoveRejectsInvalidDestination", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		item := createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+		err := repos.Items.Move(t.Context(), item.ID, inventory.Location{Kind: "shelf", ID: 1})
+		requiresError(t, err, inventory.ErrValidation, "Move with an invalid destination")
+	})
+
 	t.Run("UpdateRejectsDuplicateNameInLocation", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()

@@ -56,6 +56,14 @@ RETURNING id, room_id, container_id, name, description, quantity, notes, created
 
 	deleteItemSQL = `DELETE FROM items WHERE id = ? RETURNING id`
 
+	moveItemSQL = `
+UPDATE items
+SET room_id = ?,
+    container_id = ?,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE id = ?
+RETURNING id`
+
 	insertItemTagSQL = `INSERT INTO item_tags (item_id, tag) VALUES (?, ?)`
 
 	deleteItemTagsSQL = `DELETE FROM item_tags WHERE item_id = ?`
@@ -175,6 +183,31 @@ func (r *itemRepo) Update(ctx context.Context, item *inventory.Item) error {
 			return err
 		}
 		return loadItemTags(ctx, tx, item)
+	})
+}
+
+// Move implements inventory.ItemRepo.
+func (r *itemRepo) Move(ctx context.Context, id inventory.ItemID, destination inventory.Location) error {
+	if err := destination.Validate(); err != nil {
+		return err
+	}
+	return withTx(ctx, r.db, func(tx *sql.Tx) error {
+		if err := requireLocation(ctx, tx, destination); err != nil {
+			return err
+		}
+		roomID, containerID := locationColumns(destination)
+		var moved int64
+		err := tx.QueryRowContext(ctx, moveItemSQL, roomID, containerID, id).Scan(&moved)
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("item", int64(id))
+		}
+		if err != nil {
+			if isUniqueViolation(err) {
+				return fmt.Errorf("the destination already holds an item with this name: %w", inventory.ErrConflict)
+			}
+			return fmt.Errorf("moving item %d: %w", id, err)
+		}
+		return nil
 	})
 }
 

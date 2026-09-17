@@ -205,6 +205,122 @@ func testContainers(t *testing.T, newRepos NewRepos) {
 		requiresError(t, err, inventory.ErrNotFound, "Path")
 	})
 
+	t.Run("MoveSubtreeToAnotherRoom", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		toolbox := createContainer(t, repos, garage, nil, "Toolbox")
+		drawer := createContainer(t, repos, garage, &toolbox.ID, "Drawer")
+
+		requiresNoError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.RoomLocation(kitchen.ID)), "Move")
+
+		gotToolbox, err := repos.Containers.Get(ctx, toolbox.ID)
+		requiresNoError(t, err, "Get toolbox")
+		if gotToolbox.RoomID != kitchen.ID || gotToolbox.ParentID != nil {
+			t.Fatalf("toolbox after move: room %d parent %v, want room %d parent nil", gotToolbox.RoomID, gotToolbox.ParentID, kitchen.ID)
+		}
+		gotDrawer, err := repos.Containers.Get(ctx, drawer.ID)
+		requiresNoError(t, err, "Get drawer")
+		if gotDrawer.RoomID != kitchen.ID {
+			t.Fatalf("drawer room after move = %d, want %d (the subtree follows)", gotDrawer.RoomID, kitchen.ID)
+		}
+
+		inGarage, err := repos.Containers.ListByRoom(ctx, garage.ID)
+		requiresNoError(t, err, "ListByRoom garage")
+		if len(inGarage) != 0 {
+			t.Fatalf("containers stayed in the old room: %+v", inGarage)
+		}
+		path, err := repos.Containers.Path(ctx, drawer.ID)
+		requiresNoError(t, err, "Path")
+		if got, want := path.String(), "Kitchen > Toolbox > Drawer"; got != want {
+			t.Fatalf("path after move = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("MoveUnderContainerInAnotherRoom", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		toolbox := createContainer(t, repos, garage, nil, "Toolbox")
+		drawer := createContainer(t, repos, garage, &toolbox.ID, "Drawer")
+		cupboard := createContainer(t, repos, kitchen, nil, "Cupboard")
+
+		requiresNoError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.ContainerLocation(cupboard.ID)), "Move")
+
+		gotToolbox, err := repos.Containers.Get(ctx, toolbox.ID)
+		requiresNoError(t, err, "Get toolbox")
+		if gotToolbox.RoomID != kitchen.ID || gotToolbox.ParentID == nil || *gotToolbox.ParentID != cupboard.ID {
+			t.Fatalf("toolbox after move: room %d parent %v, want room %d parent %d", gotToolbox.RoomID, gotToolbox.ParentID, kitchen.ID, cupboard.ID)
+		}
+		gotDrawer, err := repos.Containers.Get(ctx, drawer.ID)
+		requiresNoError(t, err, "Get drawer")
+		if gotDrawer.RoomID != kitchen.ID || gotDrawer.ParentID == nil || *gotDrawer.ParentID != toolbox.ID {
+			t.Fatalf("drawer after move: room %d parent %v, want room %d parent %d", gotDrawer.RoomID, gotDrawer.ParentID, kitchen.ID, toolbox.ID)
+		}
+	})
+
+	t.Run("MoveToRoomDestinationBecomesRoot", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+		drawer := createContainer(t, repos, room, &toolbox.ID, "Drawer")
+
+		requiresNoError(t, repos.Containers.Move(ctx, drawer.ID, inventory.RoomLocation(room.ID)), "Move")
+
+		got, err := repos.Containers.Get(ctx, drawer.ID)
+		requiresNoError(t, err, "Get")
+		if got.ParentID != nil || got.RoomID != room.ID {
+			t.Fatalf("drawer after move: room %d parent %v, want room %d parent nil", got.RoomID, got.ParentID, room.ID)
+		}
+	})
+
+	t.Run("MoveRejectsCycles", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+		drawer := createContainer(t, repos, room, &toolbox.ID, "Drawer")
+
+		requiresError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.ContainerLocation(drawer.ID)), inventory.ErrCycle, "move under a descendant")
+		requiresError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.ContainerLocation(toolbox.ID)), inventory.ErrCycle, "move under itself")
+	})
+
+	t.Run("MoveRejectsUnknownDestination", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		toolbox := createContainer(t, repos, room, nil, "Toolbox")
+
+		requiresError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.RoomLocation(4242)), inventory.ErrNotFound, "Move to unknown room")
+		requiresError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.ContainerLocation(4242)), inventory.ErrNotFound, "Move to unknown container")
+	})
+
+	t.Run("MoveUnknownContainer", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		requiresError(t, repos.Containers.Move(t.Context(), 4242, inventory.RoomLocation(room.ID)), inventory.ErrNotFound, "Move")
+	})
+
+	t.Run("MoveRejectsNameCollisionInDestinationRoom", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+		toolbox := createContainer(t, repos, garage, nil, "Toolbox")
+		createContainer(t, repos, kitchen, nil, "Toolbox")
+
+		requiresError(t, repos.Containers.Move(ctx, toolbox.ID, inventory.RoomLocation(kitchen.ID)), inventory.ErrConflict, "Move onto a duplicate name")
+	})
+
 	t.Run("UpdateRenamesAndReParents", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
