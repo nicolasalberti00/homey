@@ -44,16 +44,25 @@ func TestFixedWindowEnforcesLimitAndReportsRetryAfter(t *testing.T) {
 }
 
 func TestFixedWindowRolloverResets(t *testing.T) {
-	f := newFixedWindow(30*time.Millisecond, 1)
+	// No sleeps: the window is long, and the rollover is forced
+	// deterministically by moving the counter's reset into the past, so CI
+	// timing can never flake this test.
+	f := newFixedWindow(time.Minute, 1)
 	if _, ok := f.allow("ip"); !ok {
 		t.Fatal("first allow should pass")
 	}
 	if _, ok := f.allow("ip"); ok {
 		t.Fatal("second allow within the window should fail")
 	}
-	time.Sleep(50 * time.Millisecond)
-	// The stale window has expired: no longer blocked, and a fresh allow
-	// passes — the old over-limit state was rolled over.
+	if !f.blocked("ip") {
+		t.Fatal("blocked should be true at the limit")
+	}
+
+	// Force the window to expire: blocked clears and allow opens a fresh
+	// window — the old over-limit state was rolled over.
+	f.mu.Lock()
+	f.keys["ip"].reset = time.Now().Add(-time.Millisecond)
+	f.mu.Unlock()
 	if f.blocked("ip") {
 		t.Error("blocked should be false once the window has expired")
 	}
