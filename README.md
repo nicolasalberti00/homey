@@ -97,6 +97,20 @@ authentications from one address are answered with `429` (see
 same way. Limits are keyed by the direct peer address — behind a reverse
 proxy they apply to the proxy, so tune them accordingly.
 
+## Web UI (development)
+
+The UI in [`web/`](web/) is a Svelte 5 + TypeScript app (SvelteKit, static
+build). The dev server proxies `/api`, `/healthz` and `/readyz` to a local Go
+server:
+
+```bash
+go run ./cmd/server serve          # terminal 1
+cd web && npm install && npm run dev   # terminal 2 → http://localhost:5173
+```
+
+`HOMEY_API_PROXY` overrides the proxy target. Lint and type checks:
+`npm run lint`, `npm run check` (both required in CI).
+
 ## Development
 
 ```bash
