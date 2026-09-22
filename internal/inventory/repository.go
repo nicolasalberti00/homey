@@ -59,6 +59,9 @@ type ContainerRepo interface {
 	Create(ctx context.Context, container *Container) error
 	// Get returns the container with the given ID.
 	Get(ctx context.Context, id ContainerID) (Container, error)
+	// List returns every container, across all rooms, ordered by room and
+	// then by name.
+	List(ctx context.Context) ([]Container, error)
 	// ListByRoom returns every container of a room, at any nesting depth.
 	ListByRoom(ctx context.Context, roomID RoomID) ([]Container, error)
 	// Path returns the location of a container: its room and the chain of

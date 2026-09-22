@@ -39,6 +39,11 @@ func TestItemLifecycle(t *testing.T) {
 	if created.Location.Kind != "room" || created.Location.ID != room.ID {
 		t.Fatalf("location = %+v, want room %d", created.Location, room.ID)
 	}
+	// Regression: timestamps used to be dropped in the response DTO, leaving
+	// Go's zero time (0001-01-01) on every item.
+	if created.CreatedAt.IsZero() || created.UpdatedAt.IsZero() {
+		t.Fatalf("created = %+v, want non-zero timestamps", created)
+	}
 
 	// Get.
 	rec = api.Get(itemPathID(created.ID), bearer.Write)

@@ -381,12 +381,12 @@ paths:
     get:
       operationId: list-containers
       parameters:
-        - description: List the containers of this room, at any nesting depth.
+        - description: Only containers of this room. Zero lists every room.
           explode: false
           in: query
           name: room_id
           schema:
-            description: List the containers of this room, at any nesting depth.
+            description: Only containers of this room. Zero lists every room.
             format: int64
             type: integer
       responses:
@@ -406,7 +406,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorModel"
           description: Error
-      summary: List the containers of a room
+      summary: List containers
       tags:
         - Containers
     post:

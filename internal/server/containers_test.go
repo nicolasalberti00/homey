@@ -17,7 +17,6 @@ func TestContainerLifecycle(t *testing.T) {
 	api, bearer := newTestAPI(t)
 
 	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
-
 	// Create a root container.
 	rec := api.Post("/containers", bearer.Write, ContainerInput{Name: "  Toolbox  ", Description: "red", RoomID: room.ID})
 	if rec.Code != http.StatusCreated {
@@ -53,6 +52,19 @@ func TestContainerLifecycle(t *testing.T) {
 	}
 	if len(list) != 2 {
 		t.Fatalf("list = %+v, want 2 containers", list)
+	}
+
+	// Without room_id every container of every room is listed.
+	rec = api.Get("/containers", bearer.Write)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unfiltered list: status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var all []ContainerResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &all); err != nil {
+		t.Fatalf("decoding unfiltered list: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("unfiltered list = %+v, want both containers of the room", all)
 	}
 
 	// Detail carries the computed path.

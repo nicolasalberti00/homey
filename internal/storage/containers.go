@@ -25,6 +25,11 @@ SELECT id, room_id, parent_id, name, description, created_at, updated_at
 FROM containers
 WHERE id = ?`
 
+	listContainersSQL = `
+SELECT id, room_id, parent_id, name, description, created_at, updated_at
+FROM containers
+ORDER BY room_id, name COLLATE NOCASE, id`
+
 	listContainersByRoomSQL = `
 SELECT id, room_id, parent_id, name, description, created_at, updated_at
 FROM containers
@@ -139,6 +144,11 @@ func (r *containerRepo) Get(ctx context.Context, id inventory.ContainerID) (inve
 		return inventory.Container{}, fmt.Errorf("getting container %d: %w", id, err)
 	}
 	return container, nil
+}
+
+// List implements inventory.ContainerRepo.
+func (r *containerRepo) List(ctx context.Context) ([]inventory.Container, error) {
+	return queryContainers(ctx, r.db, listContainersSQL)
 }
 
 // ListByRoom implements inventory.ContainerRepo.
