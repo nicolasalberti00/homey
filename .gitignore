@@ -8,9 +8,10 @@
 *.db-wal
 *.db-shm
 
-# web UI build output (Phase 4)
+# web UI (Phase 4)
 web/node_modules/
-web/dist/
+web/.svelte-kit/
+web/build/
 
 # environment files
 .env
