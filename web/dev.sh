@@ -125,6 +125,20 @@ if [[ ! -d web/node_modules ]]; then
 	(cd web && npm install)
 fi
 
+(cd web && npm run dev -- --port "$WEB_PORT" --strictPort) &
+WEB_PID=$!
+
+# Wait for the dev server, then print the summary last so the token stays
+# visible below Vite's banner instead of scrolling away.
+ui_ready=""
+for _ in $(seq 1 120); do
+	if curl -sf "http://localhost:$WEB_PORT/" >/dev/null 2>&1; then
+		ui_ready="yes"
+		break
+	fi
+	sleep 0.25
+done
+
 echo
 echo "──────────────────────────────────────────────────────────────"
 echo " UI:    http://localhost:$WEB_PORT"
@@ -138,7 +152,8 @@ echo " Ctrl-C stops the API and the dev server."
 echo "──────────────────────────────────────────────────────────────"
 echo
 
-(cd web && npm run dev -- --port "$WEB_PORT" --strictPort) &
-WEB_PID=$!
+if [[ -z "$ui_ready" ]]; then
+	echo "warning: the dev server did not answer on port $WEB_PORT (see its output above)" >&2
+fi
 
 wait

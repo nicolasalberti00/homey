@@ -8,10 +8,10 @@ const target = process.env.HOMEY_API_PROXY ?? 'http://127.0.0.1:8080';
 
 export default defineConfig({
 	plugins: [sveltekit()],
+	// Keep the terminal output readable: dev.sh prints the API token after
+	// the dev server is up.
+	clearScreen: false,
 	server: {
-		// Do not wipe the terminal: dev.sh prints the API token just before
-		// starting the dev server.
-		clearScreen: false,
 		proxy: {
 			'/api': { target, changeOrigin: true },
 			'/healthz': { target, changeOrigin: true },
