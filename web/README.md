@@ -18,12 +18,12 @@ It prints the UI URL and the token to paste into Settings. Test data lives
 in `~/homey-dev.db` (delete it for a clean slate, or set
 `HOMEY_TEST_RESET=1`).
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `HOMEY_TEST_DB` | `~/homey-dev.db` | database file |
-| `HOMEY_TEST_LISTEN` | `127.0.0.1:8080` | API listen address |
-| `HOMEY_TEST_WEB_PORT` | `5173` | Vite dev server port |
-| `HOMEY_TEST_RESET` | `0` | `1` deletes the database first |
+| Variable              | Default          | Purpose                        |
+| --------------------- | ---------------- | ------------------------------ |
+| `HOMEY_TEST_DB`       | `~/homey-dev.db` | database file                  |
+| `HOMEY_TEST_LISTEN`   | `127.0.0.1:8080` | API listen address             |
+| `HOMEY_TEST_WEB_PORT` | `5173`           | Vite dev server port           |
+| `HOMEY_TEST_RESET`    | `0`              | `1` deletes the database first |
 
 ## Development (manual)
 
