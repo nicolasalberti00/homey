@@ -25,15 +25,17 @@ const (
 func New(cfg *config.Config, logger *slog.Logger, db *sql.DB) *http.Server {
 	return &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           NewHandler(logger, db),
+		Handler:           NewHandler(cfg, logger, db),
 		ReadHeaderTimeout: readHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
 }
 
-// NewHandler builds the root HTTP handler. Kept separate from New so tests
-// can exercise it with httptest.
-func NewHandler(logger *slog.Logger, db *sql.DB) http.Handler {
+// NewHandler builds the root HTTP handler: security headers, CORS, rate
+// limits and failed-auth blocking wrap the mux that carries health checks
+// and the Huma API. Kept separate from New so tests can exercise it with
+// httptest.
+func NewHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB) http.Handler {
 	mux := http.NewServeMux()
 	tokens := storage.NewTokenStore(db)
 
@@ -58,7 +60,12 @@ func NewHandler(logger *slog.Logger, db *sql.DB) http.Handler {
 		Logger: logger,
 	})
 
-	return requestLogger(logger, mux)
+	var handler http.Handler = mux
+	handler = authFailureLimit(cfg.RateLimitAuthFailures, handler)
+	handler = rateLimit(cfg.RateLimitWrites, handler)
+	handler = cors(cfg.CORSOrigins, handler)
+	handler = securityHeaders(handler)
+	return requestLogger(logger, handler)
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {

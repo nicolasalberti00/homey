@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -9,10 +10,29 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nicolasalberti00/homey/internal/config"
 	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
 func newTestHandler(t *testing.T) http.Handler {
+	t.Helper()
+	handler, _ := newTestHandlerCfg(t, defaultTestConfig(t))
+	return handler
+}
+
+// defaultTestConfig loads the standard configuration (defaults only).
+func defaultTestConfig(t *testing.T) *config.Config {
+	t.Helper()
+	cfg, err := config.Load(nil, nil, io.Discard)
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	return cfg
+}
+
+// newTestHandlerCfg builds the production handler chain for cfg against a
+// fresh database, so middleware tests exercise the real wiring.
+func newTestHandlerCfg(t *testing.T, cfg *config.Config) (http.Handler, *sql.DB) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "homey.db")
 	if err := storage.MigrateUp(dbPath); err != nil {
@@ -24,7 +44,7 @@ func newTestHandler(t *testing.T) http.Handler {
 	}
 	t.Cleanup(func() { db.Close() })
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewHandler(logger, db)
+	return NewHandler(cfg, logger, db), db
 }
 
 func request(t *testing.T, h http.Handler, method, path string) *httptest.ResponseRecorder {
@@ -66,7 +86,7 @@ func TestReadyzWithClosedDatabase(t *testing.T) {
 	}
 	db.Close()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	rec := request(t, NewHandler(logger, db), http.MethodGet, "/readyz")
+	rec := request(t, NewHandler(defaultTestConfig(t), logger, db), http.MethodGet, "/readyz")
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rec.Code)
 	}

@@ -44,6 +44,8 @@ flags take precedence.
 | `HOMEY_LOG_FORMAT`   | `--log-format`   | `text`                | text or json                         |
 | `HOMEY_CORS_ORIGINS` | `--cors-origins` | *(empty)*             | Comma-separated allowed CORS origins |
 | `HOMEY_MCP_ENABLED`  | `--mcp`          | `true`                | Enable the MCP endpoint (Phase 6)    |
+| `HOMEY_RATE_LIMIT_WRITES` | `--rate-limit-writes` | `60`            | Mutating `/api/v1` requests per IP per minute (0 disables) |
+| `HOMEY_RATE_LIMIT_AUTH_FAILURES` | `--rate-limit-auth-failures` | `10` | Failed authentication attempts per IP per minute (0 disables) |
 
 ## Endpoints (so far)
 
@@ -74,7 +76,11 @@ go run ./cmd/server token revoke <id>
 `--scope read` allows only reads; `--scope read,write` also allows mutations.
 `--destructive-confirmation=bypass` marks a trusted token for the future
 two-step destructive flows (Phase 6). Without a token the API answers `401`;
-a read-only token gets `403` on mutating operations.
+a read-only token gets `403` on mutating operations. Repeated failed
+authentications from one address are answered with `429` (see
+`HOMEY_RATE_LIMIT_AUTH_FAILURES`); mutating requests are rate limited the
+same way. Limits are keyed by the direct peer address — behind a reverse
+proxy they apply to the proxy, so tune them accordingly.
 
 ## Development
 
