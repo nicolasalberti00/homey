@@ -2,69 +2,18 @@ package server
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/danielgtaylor/huma/v2"
-	"github.com/danielgtaylor/huma/v2/humatest"
-
-	"github.com/nicolasalberti00/homey/internal/storage"
 )
-
-// newRoomsTestAPI builds a test API with the rooms operations wired to a
-// fresh SQLite database, mirroring the production wiring.
-func newRoomsTestAPI(t *testing.T) humatest.TestAPI {
-	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "homey.db")
-	if err := storage.MigrateUp(dbPath); err != nil {
-		t.Fatalf("MigrateUp: %v", err)
-	}
-	db, err := storage.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-	_, api := humatest.New(t, huma.DefaultConfig("homey API test", apiVersion))
-	RegisterRooms(api, Deps{Repos: storage.NewRepos(db), Logger: logger})
-	return api
-}
-
-// decodeProblem decodes an RFC 9457 problem document, including the optional
-// per-field details.
-func decodeProblem(t *testing.T, rec *httptest.ResponseRecorder) (status int, title string, detail string, locations []string) {
-	t.Helper()
-	var problem struct {
-		Status int    `json:"status"`
-		Title  string `json:"title"`
-		Detail string `json:"detail"`
-		Errors []struct {
-			Location string `json:"location"`
-			Message  string `json:"message"`
-		} `json:"errors"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
-		t.Fatalf("decoding problem: %v; body: %s", err, rec.Body.String())
-	}
-	for _, e := range problem.Errors {
-		locations = append(locations, e.Location)
-	}
-	return problem.Status, problem.Title, problem.Detail, locations
-}
 
 func pathID(id int64) string {
 	return "/rooms/" + strconv.FormatInt(id, 10)
 }
 
 func TestRoomLifecycle(t *testing.T) {
-	api := newRoomsTestAPI(t)
+	api := newTestAPI(t)
 
 	rec := api.Post("/rooms", RoomInput{Name: "  Garage  ", Description: "  cars and tools  "})
 	if rec.Code != http.StatusCreated {
@@ -120,7 +69,7 @@ func TestRoomLifecycle(t *testing.T) {
 }
 
 func TestRoomErrors(t *testing.T) {
-	api := newRoomsTestAPI(t)
+	api := newTestAPI(t)
 
 	rec := api.Post("/rooms", RoomInput{Name: "Garage"})
 	if rec.Code != http.StatusCreated {
@@ -143,7 +92,7 @@ func TestRoomErrors(t *testing.T) {
 		t.Errorf("detail %q should be human-readable without sentinel leaks", detail)
 	}
 
-	// Unknown room: 404.
+	// Unknown room: 404 with the lookup context as detail.
 	rec = api.Get("/rooms/4242")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
