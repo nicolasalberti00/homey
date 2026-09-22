@@ -26,18 +26,41 @@ if [[ "${HOMEY_TEST_RESET:-0}" == "1" ]]; then
 	rm -f "$DB_PATH" "$DB_PATH-wal" "$DB_PATH-shm"
 fi
 
-port_busy() {
-	command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+listening_pids() {
+	command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$1" -sTCP:LISTEN -t 2>/dev/null
 }
 
-if port_busy "$API_PORT"; then
-	echo "error: port $API_PORT is already in use (a stale server? check: lsof -nP -iTCP:$API_PORT -sTCP:LISTEN)" >&2
-	exit 1
-fi
-if port_busy "$WEB_PORT"; then
-	echo "error: port $WEB_PORT is already in use (a stale dev server?)" >&2
-	exit 1
-fi
+# stop_stale frees a port when every listener belongs to a previous run of
+# this script: the API on our database, or vite from this repository. Anything
+# else is reported and left alone.
+stop_stale() {
+	local port="$1" pid cmd pids
+	pids=$(listening_pids "$port")
+	[[ -z "$pids" ]] && return 0
+	for pid in $pids; do
+		cmd=$(ps -o command= -p "$pid" 2>/dev/null || true)
+		case "$cmd" in
+		*"$DB_PATH"* | *"$PWD/web"*) ;;
+		*)
+			echo "error: port $port is held by an unrelated process (pid $pid): $cmd" >&2
+			return 1
+			;;
+		esac
+	done
+	for pid in $pids; do
+		echo "Stopping a stale dev process on port $port (pid $pid)"
+		kill "$pid" 2>/dev/null || true
+	done
+	for _ in $(seq 1 20); do
+		[[ -z "$(listening_pids "$port")" ]] && return 0
+		sleep 0.25
+	done
+	echo "error: port $port is still busy after stopping the stale process" >&2
+	return 1
+}
+
+stop_stale "$API_PORT" || exit 1
+stop_stale "$WEB_PORT" || exit 1
 
 WORK_DIR="$(mktemp -d)"
 API_PID=""
@@ -82,11 +105,8 @@ for _ in $(seq 1 40); do
 	sleep 0.25
 done
 
-# Fresh token each run; previous "dev" tokens are revoked to keep the list tidy.
-while read -r id; do
-	[[ -n "$id" ]] && "$WORK_DIR/homey" token revoke --db "$DB_PATH" "$id" >/dev/null
-done < <("$WORK_DIR/homey" token list --db "$DB_PATH" | awk '$2 == "dev" { print $1 }')
-
+# Every run mints a fresh token. Older "dev" tokens stay valid on purpose:
+# the one already stored in the browser keeps working across restarts.
 TOKEN="$("$WORK_DIR/homey" token create --name dev --scope read,write --db "$DB_PATH" |
 	grep -o 'homey_[A-Za-z0-9_-]*' | head -1)"
 
@@ -106,6 +126,8 @@ echo " UI:    http://localhost:$WEB_PORT"
 echo " Token: $TOKEN"
 echo
 echo " Paste the token in Settings → API token, then Test connection."
+echo " Restarting mints a new token; the previous one keeps working, so the"
+echo " browser stays connected."
 echo " Ctrl-C stops the API and the dev server."
 echo "──────────────────────────────────────────────────────────────"
 echo
