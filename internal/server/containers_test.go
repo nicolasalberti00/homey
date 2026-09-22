@@ -14,12 +14,12 @@ func containerPathID(id int64) string {
 }
 
 func TestContainerLifecycle(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	room := createRoomViaAPI(t, api, "Garage")
+	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
 
 	// Create a root container.
-	rec := api.Post("/containers", ContainerInput{Name: "  Toolbox  ", Description: "red", RoomID: room.ID})
+	rec := api.Post("/containers", bearer.Write, ContainerInput{Name: "  Toolbox  ", Description: "red", RoomID: room.ID})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
 	}
@@ -33,7 +33,7 @@ func TestContainerLifecycle(t *testing.T) {
 
 	// Create a nested container.
 	parent := toolbox.ID
-	rec = api.Post("/containers", ContainerInput{Name: "Drawer 1", RoomID: room.ID, ParentID: &parent})
+	rec = api.Post("/containers", bearer.Write, ContainerInput{Name: "Drawer 1", RoomID: room.ID, ParentID: &parent})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
 	}
@@ -43,7 +43,7 @@ func TestContainerLifecycle(t *testing.T) {
 	}
 
 	// List by room returns both, including nested ones.
-	rec = api.Get("/containers?room_id=" + strconv.FormatInt(room.ID, 10))
+	rec = api.Get("/containers?room_id="+strconv.FormatInt(room.ID, 10), bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -56,7 +56,7 @@ func TestContainerLifecycle(t *testing.T) {
 	}
 
 	// Detail carries the computed path.
-	rec = api.Get(containerPathID(drawer.ID))
+	rec = api.Get(containerPathID(drawer.ID), bearer.Write)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -70,44 +70,44 @@ func TestContainerLifecycle(t *testing.T) {
 
 	// Patch the name.
 	name := "Drawer 2"
-	rec = api.Patch(containerPathID(drawer.ID), ContainerPatch{Name: &name})
+	rec = api.Patch(containerPathID(drawer.ID), bearer.Write, ContainerPatch{Name: &name})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
 
 	// Delete a leaf.
-	rec = api.Delete(containerPathID(drawer.ID))
+	rec = api.Delete(containerPathID(drawer.ID), bearer.Write)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204; body: %s", rec.Code, rec.Body.String())
 	}
 }
 
 func TestContainerErrors(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	room := createRoomViaAPI(t, api, "Garage")
-	kitchen := createRoomViaAPI(t, api, "Kitchen")
+	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
+	kitchen := createRoomViaAPI(t, api, bearer.Write, "Kitchen")
 
-	rec := api.Post("/containers", ContainerInput{Name: "Toolbox", RoomID: room.ID})
+	rec := api.Post("/containers", bearer.Write, ContainerInput{Name: "Toolbox", RoomID: room.ID})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", rec.Code)
 	}
 
 	// Duplicate name within the same room: 409.
-	rec = api.Post("/containers", ContainerInput{Name: "toolbox", RoomID: room.ID})
+	rec = api.Post("/containers", bearer.Write, ContainerInput{Name: "toolbox", RoomID: room.ID})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409; body: %s", rec.Code, rec.Body.String())
 	}
 
 	// Unknown room: 404.
-	rec = api.Post("/containers", ContainerInput{Name: "Box", RoomID: 4242})
+	rec = api.Post("/containers", bearer.Write, ContainerInput{Name: "Box", RoomID: 4242})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
 	// Parent in another room: 422 from the core.
-	cupboard := createContainerViaAPI(t, api, kitchen.ID, nil, "Cupboard")
-	rec = api.Post("/containers", ContainerInput{Name: "Box", RoomID: room.ID, ParentID: &cupboard.ID})
+	cupboard := createContainerViaAPI(t, api, bearer.Write, kitchen.ID, nil, "Cupboard")
+	rec = api.Post("/containers", bearer.Write, ContainerInput{Name: "Box", RoomID: room.ID, ParentID: &cupboard.ID})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -117,41 +117,41 @@ func TestContainerErrors(t *testing.T) {
 	}
 
 	// Unknown container: 404 on every operation.
-	rec = api.Get(containerPathID(4242))
+	rec = api.Get(containerPathID(4242), bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 	name := "Box"
-	rec = api.Patch(containerPathID(4242), ContainerPatch{Name: &name})
+	rec = api.Patch(containerPathID(4242), bearer.Write, ContainerPatch{Name: &name})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	rec = api.Delete(containerPathID(4242))
+	rec = api.Delete(containerPathID(4242), bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
-	rec = api.Post(containerPathID(4242)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: room.ID}})
+	rec = api.Post(containerPathID(4242)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: room.ID}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
 	// Listing the containers of an unknown room: 404.
-	rec = api.Get("/containers?room_id=4242")
+	rec = api.Get("/containers?room_id=4242", bearer.Write)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 }
 
 func TestContainerMoveViaAPI(t *testing.T) {
-	api := newTestAPI(t)
+	api, bearer := newTestAPI(t)
 
-	garage := createRoomViaAPI(t, api, "Garage")
-	kitchen := createRoomViaAPI(t, api, "Kitchen")
-	toolbox := createContainerViaAPI(t, api, garage.ID, nil, "Toolbox")
-	drawer := createContainerViaAPI(t, api, garage.ID, &toolbox.ID, "Drawer")
+	garage := createRoomViaAPI(t, api, bearer.Write, "Garage")
+	kitchen := createRoomViaAPI(t, api, bearer.Write, "Kitchen")
+	toolbox := createContainerViaAPI(t, api, bearer.Write, garage.ID, nil, "Toolbox")
+	drawer := createContainerViaAPI(t, api, bearer.Write, garage.ID, &toolbox.ID, "Drawer")
 
 	// Moving the subtree to another room: every descendant follows.
-	rec := api.Post(containerPathID(toolbox.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: kitchen.ID}})
+	rec := api.Post(containerPathID(toolbox.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: kitchen.ID}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -163,7 +163,7 @@ func TestContainerMoveViaAPI(t *testing.T) {
 		t.Fatalf("path after move = %q", moved.Path)
 	}
 
-	rec = api.Get(containerPathID(drawer.ID))
+	rec = api.Get(containerPathID(drawer.ID), bearer.Write)
 	var gotDrawer ContainerDetail
 	if err := json.Unmarshal(rec.Body.Bytes(), &gotDrawer); err != nil {
 		t.Fatalf("decoding response: %v", err)
@@ -173,7 +173,7 @@ func TestContainerMoveViaAPI(t *testing.T) {
 	}
 
 	// Moving under a descendant is a cycle: 409.
-	rec = api.Post(containerPathID(toolbox.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "container", ID: drawer.ID}})
+	rec = api.Post(containerPathID(toolbox.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "container", ID: drawer.ID}})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409; body: %s", rec.Code, rec.Body.String())
 	}
@@ -183,24 +183,24 @@ func TestContainerMoveViaAPI(t *testing.T) {
 	}
 
 	// Unknown destination: 404.
-	rec = api.Post(containerPathID(toolbox.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: 4242}})
+	rec = api.Post(containerPathID(toolbox.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: 4242}})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 
 	// Name collision in the destination room: 409.
-	box := createContainerViaAPI(t, api, garage.ID, nil, "Box")
-	createContainerViaAPI(t, api, kitchen.ID, nil, "Box")
-	rec = api.Post(containerPathID(box.ID)+"/move", MoveBody{Destination: LocationRef{Kind: "room", ID: kitchen.ID}})
+	box := createContainerViaAPI(t, api, bearer.Write, garage.ID, nil, "Box")
+	createContainerViaAPI(t, api, bearer.Write, kitchen.ID, nil, "Box")
+	rec = api.Post(containerPathID(box.ID)+"/move", bearer.Write, MoveBody{Destination: LocationRef{Kind: "room", ID: kitchen.ID}})
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409; body: %s", rec.Code, rec.Body.String())
 	}
 }
 
 // createRoomViaAPI is a test helper creating a room through the API.
-func createRoomViaAPI(t *testing.T, api humatest.TestAPI, name string) RoomResponse {
+func createRoomViaAPI(t *testing.T, api humatest.TestAPI, bearer string, name string) RoomResponse {
 	t.Helper()
-	rec := api.Post("/rooms", RoomInput{Name: name})
+	rec := api.Post("/rooms", bearer, RoomInput{Name: name})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("creating room %q: status = %d, body: %s", name, rec.Code, rec.Body.String())
 	}
@@ -211,9 +211,9 @@ func createRoomViaAPI(t *testing.T, api humatest.TestAPI, name string) RoomRespo
 	return room
 }
 
-func createContainerViaAPI(t *testing.T, api humatest.TestAPI, roomID int64, parent *int64, name string) ContainerResponse {
+func createContainerViaAPI(t *testing.T, api humatest.TestAPI, bearer string, roomID int64, parent *int64, name string) ContainerResponse {
 	t.Helper()
-	rec := api.Post("/containers", ContainerInput{Name: name, RoomID: roomID, ParentID: parent})
+	rec := api.Post("/containers", bearer, ContainerInput{Name: name, RoomID: roomID, ParentID: parent})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("creating container %q: status = %d, body: %s", name, rec.Code, rec.Body.String())
 	}

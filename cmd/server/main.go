@@ -29,6 +29,8 @@ usage:
   homey version                print the version
   homey migrate <command>      manage the database schema
                                commands: up, down, version, force <version>
+  homey token <command>        manage API tokens
+                               commands: create, list, revoke <id>
 
 Flags: "homey serve --help" lists the configuration flags.
 Environment variables (HOMEY_*) are documented in the README.`
@@ -50,6 +52,8 @@ func run(args []string) error {
 			return nil
 		case "migrate":
 			return runMigrate(args[1:])
+		case "token":
+			return runToken(args[1:])
 		case "help", "-h", "--help":
 			fmt.Println(usage)
 			return nil
