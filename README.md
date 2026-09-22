@@ -109,7 +109,8 @@ cd web && npm install && npm run dev   # terminal 2 → http://localhost:5173
 ```
 
 `HOMEY_API_PROXY` overrides the proxy target. Lint and type checks:
-`npm run lint`, `npm run check` (both required in CI).
+`npm run lint`, `npm run check` (both required in CI). API types are
+generated from the contract: `npm run api:generate` in `web/`.
 
 ## Development
 

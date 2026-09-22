@@ -96,8 +96,8 @@ func runTokenCreate(args []string) error {
 		return err
 	}
 
-	fmt.Printf("token created (id %d, scopes %s, destructive_confirmation %s)\n\n%s\n\nThe token is shown only once: store it now.\n",
-		token.ID, token.Name, token.Scopes, plaintext)
+	fmt.Printf("token created (id %d, name %s, scopes %s, destructive_confirmation %s)\n\n%s\n\nThe token is shown only once: store it now.\n",
+		token.ID, token.Name, token.Scopes, token.DestructiveConfirmation, plaintext)
 	return nil
 }
 

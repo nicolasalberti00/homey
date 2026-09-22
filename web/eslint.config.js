@@ -31,6 +31,6 @@ export default tseslint.config(
 		}
 	},
 	{
-		ignores: ['.svelte-kit/', 'build/', 'node_modules/']
+		ignores: ['.svelte-kit/', 'build/', 'node_modules/', 'src/lib/api/schema.d.ts']
 	}
 );
