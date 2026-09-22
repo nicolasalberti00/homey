@@ -14,9 +14,10 @@ the Vite dev server. Ctrl-C stops both cleanly (no orphan processes).
 ./dev.sh
 ```
 
-It prints the UI URL and the token to paste into Settings. Test data lives
-in `~/homey-dev.db` (delete it for a clean slate, or set
-`HOMEY_TEST_RESET=1`).
+It prints the UI URL and the token to paste into Settings. The token is
+also written to `<db>.token` (mode 600) so it can be recovered after the
+terminal scrolls. Test data lives in `~/homey-dev.db` (delete it for a
+clean slate, or set `HOMEY_TEST_RESET=1`).
 
 | Variable              | Default          | Purpose                        |
 | --------------------- | ---------------- | ------------------------------ |

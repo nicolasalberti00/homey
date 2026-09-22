@@ -110,10 +110,15 @@ done
 TOKEN="$("$WORK_DIR/homey" token create --name dev --scope read,write --db "$DB_PATH" |
 	grep -o 'homey_[A-Za-z0-9_-]*' | head -1)"
 
+TOKEN_FILE="${HOMEY_TEST_TOKEN_FILE:-$DB_PATH.token}"
 if [[ -z "$TOKEN" ]]; then
 	echo "error: could not create an API token" >&2
 	exit 1
 fi
+
+# Keep the token in a file too (mode 600): terminals scroll, Vite prints its
+# banner, and the token is only shown once by the API.
+(umask 077 && printf '%s\n' "$TOKEN" >"$TOKEN_FILE")
 
 if [[ ! -d web/node_modules ]]; then
 	echo "Installing UI dependencies…"
@@ -124,6 +129,7 @@ echo
 echo "──────────────────────────────────────────────────────────────"
 echo " UI:    http://localhost:$WEB_PORT"
 echo " Token: $TOKEN"
+echo " Saved: $TOKEN_FILE (mode 600)"
 echo
 echo " Paste the token in Settings → API token, then Test connection."
 echo " Restarting mints a new token; the previous one keeps working, so the"
