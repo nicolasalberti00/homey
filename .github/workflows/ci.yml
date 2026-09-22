@@ -54,6 +54,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: install
         run: npm ci
+      - name: generated API types up to date
+        run: npm run api:generate && git diff --exit-code -- src/lib/api/schema.d.ts
       - name: lint (eslint + prettier)
         run: npm run lint
       - name: type check
