@@ -132,3 +132,43 @@ func TestUnknownFlagFails(t *testing.T) {
 		t.Fatal("expected error for unknown flag")
 	}
 }
+
+func TestRateLimits(t *testing.T) {
+	cfg, err := load(t, nil, nil)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.RateLimitWrites != DefaultRateLimitWrites || cfg.RateLimitAuthFailures != DefaultRateLimitAuthFailures {
+		t.Errorf("rate limit defaults = %d/%d, want %d/%d",
+			cfg.RateLimitWrites, cfg.RateLimitAuthFailures,
+			DefaultRateLimitWrites, DefaultRateLimitAuthFailures)
+	}
+
+	cfg, err = load(t, nil, map[string]string{
+		"HOMEY_RATE_LIMIT_WRITES":        "5",
+		"HOMEY_RATE_LIMIT_AUTH_FAILURES": "0",
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.RateLimitWrites != 5 || cfg.RateLimitAuthFailures != 0 {
+		t.Errorf("rate limits = %d/%d, want 5/0", cfg.RateLimitWrites, cfg.RateLimitAuthFailures)
+	}
+
+	cfg, err = load(t, []string{"--rate-limit-writes", "0"}, map[string]string{"HOMEY_RATE_LIMIT_WRITES": "99"})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.RateLimitWrites != 0 {
+		t.Errorf("RateLimitWrites = %d, want 0 from flag", cfg.RateLimitWrites)
+	}
+
+	for name, value := range map[string]string{
+		"HOMEY_RATE_LIMIT_WRITES":        "many",
+		"HOMEY_RATE_LIMIT_AUTH_FAILURES": "-1",
+	} {
+		if _, err := load(t, nil, map[string]string{name: value}); err == nil {
+			t.Errorf("%s=%q: expected error", name, value)
+		}
+	}
+}

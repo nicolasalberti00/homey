@@ -24,6 +24,12 @@ const (
 	DefaultDataDir   = "./data"
 	DefaultLogLevel  = "info"
 	DefaultLogFormat = "text"
+	// DefaultRateLimitWrites allows this many mutating /api/v1 requests per
+	// client IP per minute.
+	DefaultRateLimitWrites = 60
+	// DefaultRateLimitAuthFailures allows this many failed authentication
+	// attempts per client IP per minute.
+	DefaultRateLimitAuthFailures = 10
 )
 
 // Config holds every knob homey needs at startup.
@@ -42,6 +48,12 @@ type Config struct {
 	CORSOrigins []string
 	// MCPEnabled switches the MCP endpoint (Phase 6) on or off.
 	MCPEnabled bool
+	// RateLimitWrites caps mutating /api/v1 requests per client IP per
+	// minute; 0 disables the limit.
+	RateLimitWrites int
+	// RateLimitAuthFailures caps failed authentication attempts per client
+	// IP per minute; 0 disables the limit.
+	RateLimitAuthFailures int
 }
 
 var (
@@ -66,6 +78,15 @@ func Load(args []string, getenv func(string) string, stderr io.Writer) (*Config,
 		mcpEnabled = parsed
 	}
 
+	rateWrites, err := intFromEnv(getenv, "HOMEY_RATE_LIMIT_WRITES", DefaultRateLimitWrites)
+	if err != nil {
+		return nil, err
+	}
+	rateAuthFailures, err := intFromEnv(getenv, "HOMEY_RATE_LIMIT_AUTH_FAILURES", DefaultRateLimitAuthFailures)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		Listen:      valueOrDefault(getenv("HOMEY_LISTEN"), DefaultListen),
 		DataDir:     valueOrDefault(getenv("HOMEY_DATA_DIR"), DefaultDataDir),
@@ -74,6 +95,9 @@ func Load(args []string, getenv func(string) string, stderr io.Writer) (*Config,
 		LogFormat:   valueOrDefault(getenv("HOMEY_LOG_FORMAT"), DefaultLogFormat),
 		CORSOrigins: splitList(getenv("HOMEY_CORS_ORIGINS")),
 		MCPEnabled:  mcpEnabled,
+
+		RateLimitWrites:       rateWrites,
+		RateLimitAuthFailures: rateAuthFailures,
 	}
 
 	fs := flag.NewFlagSet("homey", flag.ContinueOnError)
@@ -91,6 +115,8 @@ func Load(args []string, getenv func(string) string, stderr io.Writer) (*Config,
 	var corsFlag string
 	fs.StringVar(&corsFlag, "cors-origins", strings.Join(cfg.CORSOrigins, ","), "comma-separated list of allowed CORS origins")
 	fs.BoolVar(&cfg.MCPEnabled, "mcp", cfg.MCPEnabled, "enable the MCP endpoint")
+	fs.IntVar(&cfg.RateLimitWrites, "rate-limit-writes", cfg.RateLimitWrites, "mutating /api/v1 requests per IP per minute (0 disables)")
+	fs.IntVar(&cfg.RateLimitAuthFailures, "rate-limit-auth-failures", cfg.RateLimitAuthFailures, "failed authentication attempts per IP per minute (0 disables)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -131,6 +157,12 @@ func (c *Config) validate() error {
 	if !validLogFormats[c.LogFormat] {
 		problems = append(problems, fmt.Sprintf("log format %q is not one of text, json", c.LogFormat))
 	}
+	if c.RateLimitWrites < 0 {
+		problems = append(problems, "rate limit for writes must not be negative")
+	}
+	if c.RateLimitAuthFailures < 0 {
+		problems = append(problems, "rate limit for auth failures must not be negative")
+	}
 	if len(problems) > 0 {
 		return errors.New("invalid configuration: " + strings.Join(problems, "; "))
 	}
@@ -156,4 +188,18 @@ func splitList(raw string) []string {
 		}
 	}
 	return out
+}
+
+// intFromEnv reads a non-negative integer setting from the environment,
+// falling back to def when unset.
+func intFromEnv(getenv func(string) string, name string, def int) (int, error) {
+	raw := getenv(name)
+	if strings.TrimSpace(raw) == "" {
+		return def, nil
+	}
+	parsed, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || parsed < 0 {
+		return 0, fmt.Errorf("%s: %q must be a non-negative integer", name, raw)
+	}
+	return parsed, nil
 }
