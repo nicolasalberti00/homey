@@ -5,9 +5,11 @@ room and location, manage them from a Web UI and interact with them through
 LLMs via MCP. No cloud account, no external database, no mandatory AI
 provider.
 
-> **Status: Phase 1 (foundation).** The repository has configuration, SQLite
-> with migrations, health endpoints and a Docker deployment. Inventory
-> features are not implemented yet.
+> **Status: Phase 3 (REST API) complete.** The repository ships a
+> versioned REST API with a generated OpenAPI 3.1 contract, bearer-token
+> auth and rate limiting on a SQLite-backed inventory core (rooms,
+> containers, items, tags, moves). Upcoming: Web UI (Phase 4), search
+> (Phase 5), MCP (Phase 6).
 
 ## Quickstart (Docker)
 
@@ -52,10 +54,23 @@ flags take precedence.
 - `GET /healthz` — liveness
 - `GET /readyz` — readiness (pings the database)
 
-The REST API under `/api/v1/` is documented by the generated contract in
-[`api/openapi.yaml`](api/openapi.yaml). Rooms, containers, items and moves
-are live; search answers `501` until Phase 5. Regenerate the contract after
-changing any operation:
+The REST API lives under `/api/v1/` and is documented by the generated
+contract in [`api/openapi.yaml`](api/openapi.yaml):
+
+- Rooms — `GET/POST /api/v1/rooms`, `GET/PATCH/DELETE /api/v1/rooms/{id}`
+- Containers — `GET/POST /api/v1/containers` (filter `room_id`),
+  `GET/PATCH/DELETE /api/v1/containers/{id}`,
+  `POST /api/v1/containers/{id}/move`
+- Items — `GET/POST /api/v1/items` (filters `room_id`, `container_id`),
+  `GET/PATCH/DELETE /api/v1/items/{id}`, `POST /api/v1/items/{id}/move`
+- Search — `GET /api/v1/search`, answers `501` until Phase 5
+- Public — `GET /api/v1/openapi.json` and `GET /api/v1/docs` (Stoplight docs UI)
+
+Every response carries defensive security headers (`nosniff`, frame deny,
+referrer policy). CORS is same-origin by default; configure
+`HOMEY_CORS_ORIGINS` to allow browser clients from other origins.
+
+Regenerate the contract after changing any operation:
 
 ```bash
 go run ./cmd/openapi > api/openapi.yaml
@@ -105,8 +120,8 @@ go run ./cmd/server migrate force <version>
 ## Roadmap
 
 1. Foundations — repo, configuration, SQLite, migrations, Docker ✅
-2. Inventory core — rooms, containers, items, move, validation
-3. REST API — OpenAPI, auth, tests
+2. Inventory core — rooms, containers, items, move, validation ✅
+3. REST API — OpenAPI, auth, tests ✅
 4. Web UI — dashboard, rooms, containers, items, search, themes
 5. Search — aliases, tags, ranking, ambiguity handling
 6. MCP — tool registry, read/write tools, confirmation flow
