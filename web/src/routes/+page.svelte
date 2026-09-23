@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
-	import type { Item } from '$lib/api/client';
+	import type { LocationRef } from '$lib/api/client';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import Highlight from '$lib/components/Highlight.svelte';
 	import ProblemPanel from '$lib/components/ProblemPanel.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import { ensureLoaded, inventory } from '$lib/inventory.svelte';
 	import { buildIndex } from '$lib/paths';
+	import { matchesTerms, queryTerms } from '$lib/search';
 	import { formatTimestamp } from '$lib/format';
 
 	// Single-page app: kick the shared load off once, without an effect.
@@ -18,22 +20,46 @@
 		[...inv.items].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5)
 	);
 
-	let query = $state('');
-	const trimmedQuery = $derived(query.trim().toLowerCase());
-	const results = $derived(search(inv.items, trimmedQuery));
+	// Client-side search until the search endpoint lands in Phase 5: it looks
+	// at the same fields the API will (name, description, tags) and narrows
+	// the results with simple room and tag filters.
+	const RESULT_LIMIT = 20;
 
-	// Client-side filtering until the search endpoint lands in Phase 5; it
-	// searches the same fields the API will (name, description, tags).
-	function search(items: Item[], term: string): Item[] {
-		if (term.length < 2) return [];
-		return items
-			.filter((item) => {
-				const haystack = [item.name, item.description, ...(item.tags ?? [])]
-					.join('\n')
-					.toLowerCase();
-				return haystack.includes(term);
-			})
-			.slice(0, 20);
+	let query = $state('');
+	let roomFilter = $state('');
+	let tagFilter = $state('');
+
+	const terms = $derived(queryTerms(query));
+	const selectedRoom = $derived(roomFilter === '' ? undefined : Number(roomFilter));
+	const searching = $derived(query.trim().length >= 2 || roomFilter !== '' || tagFilter !== '');
+	const matches = $derived(
+		searching
+			? inv.items
+					.filter((item) => matchesTerms(item, terms))
+					.filter(
+						(item) =>
+							selectedRoom === undefined || index.locationRoomId(item.location) === selectedRoom
+					)
+					.filter((item) => tagFilter === '' || (item.tags ?? []).includes(tagFilter))
+					.sort((a, b) => a.name.localeCompare(b.name))
+			: []
+	);
+	const results = $derived(matches.slice(0, RESULT_LIMIT));
+
+	const rooms = $derived([...inv.rooms].sort((a, b) => a.name.localeCompare(b.name)));
+	const tags = $derived(
+		[...new Set(inv.items.flatMap((item) => item.tags ?? []))].sort((a, b) => a.localeCompare(b))
+	);
+
+	function clearFilters(): void {
+		roomFilter = '';
+		tagFilter = '';
+	}
+
+	function locationHref(location: LocationRef): string {
+		return location.kind === 'room'
+			? resolve('/rooms/[id]', { id: String(location.id) })
+			: resolve('/containers/[id]', { id: String(location.id) });
 	}
 </script>
 
@@ -76,28 +102,73 @@
 				aria-describedby="search-hint"
 			/>
 			<p id="search-hint" class="muted">
-				Searches name, description and tags. The server-side search arrives in Phase 5.
+				Every term must match the name, description or tags. Server-side ranking arrives in Phase 5.
 			</p>
 		</div>
 
-		{#if trimmedQuery.length >= 2}
+		<div class="filters">
+			<div class="field">
+				<label for="filter-room">Room</label>
+				<select id="filter-room" bind:value={roomFilter}>
+					<option value="">All rooms</option>
+					{#each rooms as room (room.id)}
+						<option value={String(room.id)}>{room.name}</option>
+					{/each}
+				</select>
+			</div>
+			<div class="field">
+				<label for="filter-tag">Tag</label>
+				<select id="filter-tag" bind:value={tagFilter}>
+					<option value="">All tags</option>
+					{#each tags as tag (tag)}
+						<option value={tag}>{tag}</option>
+					{/each}
+				</select>
+			</div>
+			{#if roomFilter !== '' || tagFilter !== ''}
+				<button class="btn" type="button" onclick={clearFilters}>Clear filters</button>
+			{/if}
+		</div>
+
+		{#if searching}
 			<p role="status">
-				{results.length}
-				{results.length === 1 ? 'result' : 'results'}
+				{matches.length}
+				{matches.length === 1 ? 'result' : 'results'}
+				{#if matches.length > results.length}
+					<span class="muted">(showing the first {results.length})</span>
+				{/if}
 			</p>
 			{#if results.length === 0}
-				<EmptyState title="Nothing matches “{query.trim()}”" hint="Try a shorter term." />
+				<EmptyState
+					title={terms.length > 0
+						? `Nothing matches “${query.trim()}”`
+						: 'Nothing matches this selection'}
+					hint="Try a shorter term, or clear the room and tag filters."
+				/>
 			{:else}
 				<ul class="results">
 					{#each results as item (item.id)}
 						<li class="card">
 							<p class="name">
-								<a href={resolve('/items/[id]', { id: String(item.id) })}>{item.name}</a>
+								<a href={resolve('/items/[id]', { id: String(item.id) })}
+									><Highlight text={item.name} {terms} /></a
+								>
 								{#if item.quantity > 1}<span class="qty">×{item.quantity}</span>{/if}
 							</p>
-							<p class="muted location">{index.locationLabel(item.location)}</p>
+							<p class="muted location">
+								<!-- locationHref() picks the route and resolves it internally. -->
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+								<a href={locationHref(item.location)}>{index.locationLabel(item.location)}</a>
+							</p>
 							{#if item.description}
-								<p class="desc">{item.description}</p>
+								<p class="desc"><Highlight text={item.description} {terms} /></p>
+							{/if}
+							{#if item.tags?.length}
+								<ul class="tags" aria-label="Tags">
+									{#each item.tags as tag (tag)}
+										<li><Highlight text={tag} {terms} /></li>
+									{/each}
+								</ul>
 							{/if}
 						</li>
 					{/each}
@@ -162,6 +233,14 @@
 		font-size: 0.9rem;
 	}
 
+	.filters {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+		gap: 0.75rem;
+		align-items: end;
+		margin-top: 0.75rem;
+	}
+
 	.results {
 		list-style: none;
 		margin: 0.75rem 0 0;
@@ -184,5 +263,21 @@
 	.desc {
 		margin: 0.15rem 0 0;
 		font-size: 0.9rem;
+	}
+
+	.tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		list-style: none;
+		margin: 0.4rem 0 0;
+		padding: 0;
+	}
+
+	.tags li {
+		background: var(--surface-2);
+		border-radius: 999px;
+		font-size: 0.8rem;
+		padding: 0.1rem 0.55rem;
 	}
 </style>
