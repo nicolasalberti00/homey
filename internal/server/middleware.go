@@ -87,7 +87,8 @@ func rateLimit(perMinute int, next http.Handler) http.Handler {
 
 // authFailureLimit blocks client IPs whose failed authentications exceeded
 // the limit. Failed attempts are detected from the 401 responses the auth
-// middleware produces. A limit of 0 disables it.
+// middleware produces. Like rateLimit, the 429 carries Retry-After so clients
+// can tell the user how long to wait. A limit of 0 disables it.
 func authFailureLimit(perMinute int, next http.Handler) http.Handler {
 	if perMinute <= 0 {
 		return next
@@ -95,7 +96,8 @@ func authFailureLimit(perMinute int, next http.Handler) http.Handler {
 	failures := newFixedWindow(time.Minute, perMinute)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := clientIP(r)
-		if failures.blocked(ip) {
+		if retryAfter := failures.retryAfter(ip); retryAfter > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			writeProblem(w, http.StatusTooManyRequests, "too many failed authentication attempts, try again later")
 			return
 		}
@@ -165,12 +167,17 @@ func (f *fixedWindow) allow(key string) (int, bool) {
 	return 0, true
 }
 
-// blocked reports whether key is already over its limit in this window.
-func (f *fixedWindow) blocked(key string) bool {
+// retryAfter returns the seconds until key's window resets when key has
+// reached its limit, or 0 when it may proceed.
+func (f *fixedWindow) retryAfter(key string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	counter := f.keys[key]
-	return counter != nil && time.Now().Before(counter.reset) && counter.count >= f.limit
+	now := time.Now()
+	if counter == nil || !now.Before(counter.reset) || counter.count < f.limit {
+		return 0
+	}
+	return int(counter.reset.Sub(now).Seconds()) + 1
 }
 
 // cleanup drops expired entries; called on window rollover with the lock

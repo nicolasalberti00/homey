@@ -16,6 +16,8 @@ export type Problem = {
 	status: number;
 	detail?: string;
 	errors?: ErrorDetail[] | null;
+	/** Seconds to wait before retrying, from Retry-After on 429 responses. */
+	retryAfter?: number;
 };
 
 export type Room = components['schemas']['RoomResponse'];
@@ -70,17 +72,28 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
 }
 
 async function readProblem(response: Response): Promise<Problem> {
+	// Both rate limiters answer 429 with Retry-After (delta-seconds); keep the
+	// wait so the UI can say when the request may be retried.
+	const retryAfter = parseRetryAfter(response.headers.get('Retry-After'));
 	try {
 		const problem = (await response.json()) as Partial<Problem>;
 		return {
 			title: problem.title ?? response.statusText,
 			status: problem.status ?? response.status,
 			detail: problem.detail,
-			errors: problem.errors
+			errors: problem.errors,
+			retryAfter
 		};
 	} catch {
-		return { title: response.statusText, status: response.status };
+		return { title: response.statusText, status: response.status, retryAfter };
 	}
+}
+
+/** parseRetryAfter reads the delta-seconds form; HTTP-date values are ignored. */
+function parseRetryAfter(header: string | null): number | undefined {
+	if (header === null) return undefined;
+	const seconds = Number.parseInt(header, 10);
+	return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
 }
 
 /** Verifies reachability and credentials; returns a human-readable summary. */

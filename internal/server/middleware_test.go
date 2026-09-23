@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -34,12 +35,15 @@ func TestFixedWindowEnforcesLimitAndReportsRetryAfter(t *testing.T) {
 	if retryAfter <= 0 || retryAfter > 60 {
 		t.Errorf("retryAfter = %d, want seconds remaining in the window", retryAfter)
 	}
-	if !f.blocked("ip") {
-		t.Error("blocked = false after the limit was exceeded")
+	if retryAfter := f.retryAfter("ip"); retryAfter <= 0 || retryAfter > 60 {
+		t.Errorf("retryAfter = %d, want seconds remaining in the window", retryAfter)
 	}
 	// Other keys are unaffected.
 	if _, ok := f.allow("other"); !ok {
 		t.Error("another key was limited by the first key's window")
+	}
+	if retryAfter := f.retryAfter("other"); retryAfter != 0 {
+		t.Errorf("retryAfter for an unblocked key = %d, want 0", retryAfter)
 	}
 }
 
@@ -54,8 +58,8 @@ func TestFixedWindowRolloverResets(t *testing.T) {
 	if _, ok := f.allow("ip"); ok {
 		t.Fatal("second allow within the window should fail")
 	}
-	if !f.blocked("ip") {
-		t.Fatal("blocked should be true at the limit")
+	if f.retryAfter("ip") == 0 {
+		t.Fatal("retryAfter should be positive at the limit")
 	}
 
 	// Force the window to expire: blocked clears and allow opens a fresh
@@ -63,8 +67,8 @@ func TestFixedWindowRolloverResets(t *testing.T) {
 	f.mu.Lock()
 	f.keys["ip"].reset = time.Now().Add(-time.Millisecond)
 	f.mu.Unlock()
-	if f.blocked("ip") {
-		t.Error("blocked should be false once the window has expired")
+	if retryAfter := f.retryAfter("ip"); retryAfter != 0 {
+		t.Errorf("retryAfter = %d, want 0 once the window has expired", retryAfter)
 	}
 	if _, ok := f.allow("ip"); !ok {
 		t.Error("allow after the window rolled over should pass")
@@ -120,7 +124,7 @@ func TestDisabledLimitsArePassThrough(t *testing.T) {
 }
 
 // assertProblem429 checks the full over-limit contract: status, problem
-// media type and the RFC 9457 fields.
+// media type, RFC 9457 fields and the Retry-After hint.
 func assertProblem429(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	if rec.Code != http.StatusTooManyRequests {
@@ -128,6 +132,11 @@ func assertProblem429(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/problem+json") {
 		t.Fatalf("Content-Type = %q, want application/problem+json", ct)
+	}
+	if retry := rec.Header().Get("Retry-After"); retry == "" {
+		t.Error("Retry-After missing on 429")
+	} else if seconds, err := strconv.Atoi(retry); err != nil || seconds <= 0 {
+		t.Errorf("Retry-After = %q, want positive seconds", retry)
 	}
 	var problem struct {
 		Title  string `json:"title"`
@@ -160,9 +169,6 @@ func TestRateLimitProblemContract(t *testing.T) {
 		}
 		if want == http.StatusTooManyRequests {
 			assertProblem429(t, rec)
-			if rec.Header().Get("Retry-After") == "" {
-				t.Error("Retry-After missing on the write limit response")
-			}
 		}
 	}
 }
