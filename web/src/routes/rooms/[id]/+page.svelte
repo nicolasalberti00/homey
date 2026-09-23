@@ -177,6 +177,27 @@
 
 	<section aria-labelledby="containers-heading">
 		<h2 id="containers-heading">Containers</h2>
+		{#if roomContainers.length === 0}
+			<EmptyState
+				title="No containers in this room"
+				hint="Create the first container with the form below."
+			/>
+		{:else}
+			<ul class="list">
+				{#each roomContainers as container (container.id)}
+					<li class="card">
+						<p class="name">
+							<a href={resolve('/containers/[id]', { id: String(container.id) })}
+								>{container.name}</a
+							>
+						</p>
+						{#if container.description}
+							<p class="muted">{container.description}</p>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
 		<form class="card create" onsubmit={createContainer}>
 			<h3>New container</h3>
 			<div class="field">
@@ -204,39 +225,14 @@
 				{creatingContainer ? 'Creating…' : 'Create container'}
 			</button>
 		</form>
-		{#if roomContainers.length === 0}
-			<EmptyState
-				title="No containers in this room"
-				hint="Create the first container with the form above."
-			/>
-		{:else}
-			<ul class="list">
-				{#each roomContainers as container (container.id)}
-					<li class="card">
-						<p class="name">
-							<a href={resolve('/containers/[id]', { id: String(container.id) })}
-								>{container.name}</a
-							>
-						</p>
-						{#if container.description}
-							<p class="muted">{container.description}</p>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
 	</section>
 
 	<section aria-labelledby="items-heading">
 		<h2 id="items-heading">Items in the room</h2>
-		<div class="card create">
-			<h3>New item</h3>
-			<ItemForm saving={creatingItem} onSubmit={createItem} />
-		</div>
 		{#if directItems.length === 0}
 			<EmptyState
 				title="No items directly in this room"
-				hint="Create the first item with the form above, or add items inside a container."
+				hint="Create the first item with the form below, or add items inside a container."
 			/>
 		{:else}
 			<ul class="list">
@@ -260,6 +256,10 @@
 				{/each}
 			</ul>
 		{/if}
+		<div class="card create">
+			<h3>New item</h3>
+			<ItemForm saving={creatingItem} onSubmit={createItem} />
+		</div>
 	</section>
 
 	<section class="card danger-zone" aria-labelledby="danger-heading">
@@ -277,7 +277,7 @@
 	}
 
 	.create {
-		margin-bottom: 1.5rem;
+		margin-top: 1rem;
 	}
 
 	.create h3 {
