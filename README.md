@@ -139,6 +139,20 @@ go test ./...
 go run ./cmd/server serve --listen 127.0.0.1:8080
 ```
 
+Coverage is part of CI and has a floor of 75% over `internal/...`:
+
+```bash
+go test -coverpkg=./internal/... -coverprofile=coverage.out ./...
+go run ./cmd/coverage -profile coverage.out
+```
+
+`cmd/coverage` prints the coverage of every package and fails below the
+minimum. The profile is cross-package (`-coverpkg`), so a package counts the
+coverage it gets from other packages' tests. It reads the profile with
+`golang.org/x/tools/cover`, the parser behind `go tool cover`, which merges the
+samples of a block — `-coverpkg` reports each block once per test binary — so
+the total agrees with `go tool cover -func`.
+
 Migrations run automatically at start-up. Operational helpers:
 
 ```bash
