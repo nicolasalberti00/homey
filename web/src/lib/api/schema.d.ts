@@ -167,7 +167,7 @@ export interface paths {
         };
         /**
          * Search the inventory
-         * @description Matches the query against item names, descriptions, aliases and tags, case-insensitively, and returns the matches ordered by name.
+         * @description Matches every term of the query against item names, descriptions, aliases and tags. Candidates come back best match first: an exact match before a prefix, a prefix before a partial one, and a name before an alias, a tag and a description.
          */
         get: operations["search"];
         put?: never;
@@ -415,6 +415,27 @@ export interface components {
              * @description When the room was last updated.
              */
             updated_at: string;
+        };
+        SearchMatch: {
+            /**
+             * @description Item field the query matched.
+             * @enum {string}
+             */
+            field: "name" | "alias" | "tag" | "description";
+            /**
+             * @description How closely the field matched: the field is the term, starts with it, or contains it somewhere else.
+             * @enum {string}
+             */
+            kind: "exact" | "prefix" | "partial";
+        };
+        SearchResult: {
+            item: components["schemas"]["ItemResponse"];
+            match: components["schemas"]["SearchMatch"];
+            /**
+             * @description Full path of the location, so same-named items can be told apart.
+             * @example Garage > Toolbox
+             */
+            path: string;
         };
     };
     responses: never;
@@ -983,7 +1004,7 @@ export interface operations {
     search: {
         parameters: {
             query: {
-                /** @description Free-text query. */
+                /** @description Free-text query; every term must match. */
                 q: string;
             };
             header?: never;
@@ -998,7 +1019,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ItemResponse"][] | null;
+                    "application/json": components["schemas"]["SearchResult"][] | null;
                 };
             };
             /** @description Error */

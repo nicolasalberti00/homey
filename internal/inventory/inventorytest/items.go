@@ -739,6 +739,38 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
+	t.Run("SearchRequiresEveryTerm", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		location := inventory.RoomLocation(room.ID)
+		drill := inventory.Item{
+			Name:        "Bosch drill",
+			Description: "cordless",
+			Quantity:    1,
+			Location:    location,
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &drill), "creating item")
+		createItem(t, repos, "Hammer", location)
+
+		// Terms match in any order and across fields.
+		for _, query := range []string{"bosch drill", "drill bosch", "bosch cordless"} {
+			matches, err := repos.Items.Search(ctx, query)
+			requiresNoError(t, err, "Search "+query)
+			if names := itemNames(matches); !slices.Equal(names, []string{"Bosch drill"}) {
+				t.Fatalf("Search(%q) = %v, want [Bosch drill]", query, names)
+			}
+		}
+
+		// One term that matches nothing is enough to drop the item.
+		matches, err := repos.Items.Search(ctx, "bosch hammer")
+		requiresNoError(t, err, "Search with an unmatched term")
+		if len(matches) != 0 {
+			t.Fatalf("Search = %v, want no matches", itemNames(matches))
+		}
+	})
+
 	t.Run("SearchIgnoresNotes", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
