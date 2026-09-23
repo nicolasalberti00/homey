@@ -89,6 +89,13 @@
 		padding: 1rem;
 		background: var(--surface);
 		border-right: 1px solid var(--border);
+		/* Keep the nav reachable while the content scrolls: sticky inside the
+		   grid area, full viewport height, its own scroll if it ever overflows. */
+		position: sticky;
+		top: 0;
+		align-self: start;
+		height: 100dvh;
+		overflow-y: auto;
 	}
 
 	.brand {
@@ -151,6 +158,8 @@
 			border-right: 0;
 			border-bottom: 1px solid var(--border);
 			overflow-x: auto;
+			/* Sticky top bar on narrow screens: only as tall as its content. */
+			height: auto;
 		}
 
 		nav {
