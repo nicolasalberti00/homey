@@ -92,7 +92,7 @@
 					{#each results as item (item.id)}
 						<li class="card">
 							<p class="name">
-								{item.name}
+								<a href={resolve('/items/[id]', { id: String(item.id) })}>{item.name}</a>
 								{#if item.quantity > 1}<span class="qty">×{item.quantity}</span>{/if}
 							</p>
 							<p class="muted location">{index.locationLabel(item.location)}</p>
@@ -117,7 +117,9 @@
 			<ul class="results">
 				{#each recent as item (item.id)}
 					<li class="card">
-						<p class="name">{item.name}</p>
+						<p class="name">
+							<a href={resolve('/items/[id]', { id: String(item.id) })}>{item.name}</a>
+						</p>
 						<p class="muted location">
 							{index.locationLabel(item.location)} · {formatTimestamp(item.updated_at)}
 						</p>
@@ -153,10 +155,6 @@
 
 	section + section {
 		margin-top: 1.5rem;
-	}
-
-	.field {
-		max-width: 32rem;
 	}
 
 	.field p {

@@ -116,7 +116,6 @@
 
 <style>
 	.create {
-		max-width: 32rem;
 		margin-bottom: 1.5rem;
 	}
 

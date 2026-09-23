@@ -3,15 +3,17 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import {
-		ApiError,
 		apiFetch,
+		toProblem,
 		type Container,
 		type ContainerDetail,
+		type Item,
 		type LocationRef,
 		type Problem
 	} from '$lib/api/client';
 	import ConfirmButton from '$lib/components/ConfirmButton.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ItemForm, { type ItemDraft } from '$lib/components/ItemForm.svelte';
 	import ProblemPanel from '$lib/components/ProblemPanel.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import { ensureLoaded, inventory, refreshInventory } from '$lib/inventory.svelte';
@@ -69,6 +71,7 @@
 	let childName = $state('');
 	let childDescription = $state('');
 	let creating = $state(false);
+	let creatingItem = $state(false);
 
 	// Edit this container.
 	let editing = $state(false);
@@ -81,10 +84,6 @@
 	let destination = $state('');
 	let moving = $state(false);
 	let moved = $state(false);
-
-	function toProblem(error: unknown, title: string): Problem {
-		return error instanceof ApiError ? error.problem : { title, status: 0, detail: String(error) };
-	}
 
 	// The edit form is seeded in the event handler, not in an effect.
 	function startEdit() {
@@ -137,6 +136,23 @@
 			problem = toProblem(error, 'Could not create the container');
 		} finally {
 			creating = false;
+		}
+	}
+
+	async function createItem(draft: ItemDraft) {
+		if (!container) return;
+		creatingItem = true;
+		problem = null;
+		try {
+			await apiFetch<Item>('/api/v1/items', {
+				method: 'POST',
+				body: { ...draft, location: { kind: 'container', id: container.id } }
+			});
+			await refreshInventory();
+		} catch (error) {
+			problem = toProblem(error, 'Could not create the item');
+		} finally {
+			creatingItem = false;
 		}
 	}
 
@@ -295,6 +311,22 @@
 
 	<section aria-labelledby="children-heading">
 		<h2 id="children-heading">Containers inside</h2>
+		{#if children.length === 0}
+			<EmptyState title="No containers inside" hint="Create one with the form below." />
+		{:else}
+			<ul class="list">
+				{#each children as child (child.id)}
+					<li class="card">
+						<p class="name">
+							<a href={resolve('/containers/[id]', { id: String(child.id) })}>{child.name}</a>
+						</p>
+						{#if child.description}
+							<p class="muted">{child.description}</p>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
 		<form class="card create" onsubmit={createChild}>
 			<h3>New container</h3>
 			<div class="field">
@@ -316,34 +348,18 @@
 				{creating ? 'Creating…' : 'Create container'}
 			</button>
 		</form>
-		{#if children.length === 0}
-			<EmptyState title="No containers inside" hint="Create one with the form above." />
-		{:else}
-			<ul class="list">
-				{#each children as child (child.id)}
-					<li class="card">
-						<p class="name">
-							<a href={resolve('/containers/[id]', { id: String(child.id) })}>{child.name}</a>
-						</p>
-						{#if child.description}
-							<p class="muted">{child.description}</p>
-						{/if}
-					</li>
-				{/each}
-			</ul>
-		{/if}
 	</section>
 
 	<section aria-labelledby="items-heading">
 		<h2 id="items-heading">Items inside</h2>
 		{#if items.length === 0}
-			<EmptyState title="No items here" hint="Item management arrives in the next step." />
+			<EmptyState title="No items here" hint="Create the first item with the form below." />
 		{:else}
 			<ul class="list">
 				{#each items as item (item.id)}
 					<li class="card">
 						<p class="name">
-							{item.name}
+							<a href={resolve('/items/[id]', { id: String(item.id) })}>{item.name}</a>
 							{#if item.quantity > 1}<span class="muted">×{item.quantity}</span>{/if}
 						</p>
 						{#if item.description}
@@ -360,6 +376,10 @@
 				{/each}
 			</ul>
 		{/if}
+		<div class="card create">
+			<h3>New item</h3>
+			<ItemForm saving={creatingItem} onSubmit={createItem} />
+		</div>
 	</section>
 
 	<section class="card danger-zone" aria-labelledby="danger-heading">
@@ -399,8 +419,7 @@
 	}
 
 	.create {
-		max-width: 32rem;
-		margin-bottom: 1.5rem;
+		margin-top: 1rem;
 	}
 
 	.create h3 {
