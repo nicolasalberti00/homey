@@ -1,9 +1,8 @@
 package server
 
-// The search endpoint is part of the application contract from day one, but
-// its implementation arrives with Phase 5 (aliases, tags, ranking). Until
-// then it answers with a stable 501 problem so clients can build against
-// the shape.
+// The search operation: it answers with the items whose name or description
+// contains the query. Aliases, tags and ranking are not part of the query
+// yet, so the response stays a plain list of items.
 
 import (
 	"context"
@@ -19,21 +18,25 @@ func RegisterSearch(api huma.API, deps Deps) {
 		Method:      http.MethodGet,
 		Path:        "/search",
 		Summary:     "Search the inventory",
-		Description: "Not implemented yet: the query is accepted and the endpoint answers with 501 until Phase 5 delivers it.",
+		Description: "Matches the query against item names and descriptions, case-insensitively, and returns the matches ordered by name.",
 		Tags:        []string{"Search"},
 	}, func(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
-		return nil, &huma.ErrorModel{
-			Status: http.StatusNotImplemented,
-			Title:  "Not Implemented",
-			Detail: "search is planned for Phase 5 of the roadmap",
+		items, err := deps.Repos.Items.Search(ctx, input.Query)
+		if err != nil {
+			return nil, mapError(deps, err)
 		}
+		out := make([]ItemResponse, len(items))
+		for index, item := range items {
+			out[index] = newItemResponse(item)
+		}
+		return &SearchOutput{Body: out}, nil
 	})
 }
 
 type SearchInput struct {
-	Query string `query:"q" required:"true" minLength:"1" example:"trapano" doc:"Free-text query."`
+	Query string `query:"q" required:"true" minLength:"1" maxLength:"200" example:"trapano" doc:"Free-text query."`
 }
 
 type SearchOutput struct {
-	Body struct{} `json:"body"`
+	Body []ItemResponse `json:"body"`
 }

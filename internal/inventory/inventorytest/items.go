@@ -482,6 +482,156 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		requiresError(t, err, inventory.ErrNotFound, "Get after Delete")
 		requiresError(t, repos.Items.Delete(ctx, item.ID), inventory.ErrNotFound, "second Delete")
 	})
+
+	t.Run("SearchMatchesNameAndDescription", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		container := createContainer(t, repos, room, nil, "Toolbox")
+		drill := inventory.Item{
+			Name:        "Bosch drill",
+			Description: "cordless",
+			Quantity:    1,
+			Location:    inventory.ContainerLocation(container.ID),
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &drill), "creating item")
+		createItem(t, repos, "Hammer", inventory.RoomLocation(room.ID))
+
+		byName, err := repos.Items.Search(ctx, "drill")
+		requiresNoError(t, err, "Search by name")
+		if names := itemNames(byName); !slices.Equal(names, []string{"Bosch drill"}) {
+			t.Fatalf("Search by name = %v, want [Bosch drill]", names)
+		}
+
+		// The description is searched as well, and the match spans every
+		// location, containers included.
+		byDescription, err := repos.Items.Search(ctx, "cordless")
+		requiresNoError(t, err, "Search by description")
+		if len(byDescription) != 1 || byDescription[0].Location != drill.Location {
+			t.Fatalf("Search by description = %+v, want the drill in its container", byDescription)
+		}
+	})
+
+	t.Run("SearchIgnoresCase", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		createItem(t, repos, "Cordless Drill", inventory.RoomLocation(room.ID))
+
+		for _, query := range []string{"drill", "DRILL", "DrIlL", "  drill  "} {
+			matches, err := repos.Items.Search(ctx, query)
+			requiresNoError(t, err, "Search "+query)
+			if names := itemNames(matches); !slices.Equal(names, []string{"Cordless Drill"}) {
+				t.Fatalf("Search(%q) = %v, want [Cordless Drill]", query, names)
+			}
+		}
+	})
+
+	t.Run("SearchIsOrderedByName", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		location := inventory.RoomLocation(room.ID)
+		createItem(t, repos, "drill battery", location)
+		createItem(t, repos, "Drill", location)
+		createItem(t, repos, "Hammer drill", location)
+
+		matches, err := repos.Items.Search(ctx, "drill")
+		requiresNoError(t, err, "Search")
+		want := []string{"Drill", "drill battery", "Hammer drill"}
+		if names := itemNames(matches); !slices.Equal(names, want) {
+			t.Fatalf("Search = %v, want %v", names, want)
+		}
+	})
+
+	t.Run("SearchEscapesWildcards", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		location := inventory.RoomLocation(room.ID)
+		createItem(t, repos, "Cable 50% copper", location)
+		createItem(t, repos, "Screws", location)
+
+		// The query is data, not a LIKE pattern: "%" matches a literal one.
+		matches, err := repos.Items.Search(ctx, "50%")
+		requiresNoError(t, err, "Search 50%")
+		if names := itemNames(matches); !slices.Equal(names, []string{"Cable 50% copper"}) {
+			t.Fatalf("Search(50%%) = %v, want [Cable 50%% copper]", names)
+		}
+
+		matches, err = repos.Items.Search(ctx, "_")
+		requiresNoError(t, err, "Search _")
+		if len(matches) != 0 {
+			t.Fatalf("Search(_) = %v, want no matches", itemNames(matches))
+		}
+	})
+
+	t.Run("SearchReturnsTags", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := inventory.Item{
+			Name:     "Drill",
+			Quantity: 1,
+			Tags:     []string{"Strumenti", "bagno"},
+			Location: inventory.RoomLocation(room.ID),
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &item), "creating item")
+
+		matches, err := repos.Items.Search(ctx, "drill")
+		requiresNoError(t, err, "Search")
+		// Tags come back in case-insensitive order, like every listing.
+		if len(matches) != 1 || !slices.Equal(matches[0].Tags, []string{"bagno", "Strumenti"}) {
+			t.Fatalf("Search = %+v, want the item carrying its tags", matches)
+		}
+	})
+
+	t.Run("SearchIgnoresNotesAndTags", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := inventory.Item{
+			Name:     "Drill",
+			Quantity: 1,
+			Notes:    "battery in the charger",
+			Tags:     []string{"cordless"},
+			Location: inventory.RoomLocation(room.ID),
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &item), "creating item")
+
+		for _, query := range []string{"battery", "cordless"} {
+			matches, err := repos.Items.Search(ctx, query)
+			requiresNoError(t, err, "Search "+query)
+			if len(matches) != 0 {
+				t.Fatalf("Search(%q) = %v, want no matches: notes and tags are not searched", query, itemNames(matches))
+			}
+		}
+	})
+
+	t.Run("SearchWithBlankQueryMatchesNothing", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+
+		for _, query := range []string{"", "   ", "\t\n"} {
+			matches, err := repos.Items.Search(ctx, query)
+			requiresNoError(t, err, "Search blank query")
+			if matches == nil {
+				t.Fatalf("Search(%q) returned nil, want an empty slice", query)
+			}
+			if len(matches) != 0 {
+				t.Fatalf("Search(%q) = %v, want no matches", query, itemNames(matches))
+			}
+		}
+	})
 }
 
 // itemNames extracts the names of items in listing order.

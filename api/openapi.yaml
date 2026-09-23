@@ -368,9 +368,6 @@ components:
         - created_at
         - updated_at
       type: object
-    SearchOutputBody:
-      additionalProperties: false
-      type: object
 info:
   description: "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves. All operations require a bearer token except this document, the docs UI and the schemas."
   title: homey API
@@ -859,7 +856,7 @@ paths:
         - Rooms
   /search:
     get:
-      description: "Not implemented yet: the query is accepted and the endpoint answers with 501 until Phase 5 delivers it."
+      description: Matches the query against item names and descriptions, case-insensitively, and returns the matches ordered by name.
       operationId: search
       parameters:
         - description: Free-text query.
@@ -871,6 +868,7 @@ paths:
             description: Free-text query.
             examples:
               - trapano
+            maxLength: 200
             minLength: 1
             type: string
       responses:
@@ -878,7 +876,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SearchOutputBody"
+                items:
+                  $ref: "#/components/schemas/ItemResponse"
+                type:
+                  - array
+                  - "null"
           description: OK
         default:
           content:

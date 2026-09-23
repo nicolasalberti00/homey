@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
@@ -40,6 +41,15 @@ ORDER BY name COLLATE NOCASE, id`
 SELECT id, room_id, container_id, name, description, quantity, notes, created_at, updated_at
 FROM items
 WHERE container_id = ?
+ORDER BY name COLLATE NOCASE, id`
+
+	// LIKE is case-insensitive for ASCII by default, which is the same
+	// folding the COLLATE NOCASE ordering uses. The query is passed as a
+	// pattern with its wildcards escaped (see likePattern).
+	searchItemsSQL = `
+SELECT id, room_id, container_id, name, description, quantity, notes, created_at, updated_at
+FROM items
+WHERE name LIKE ? ESCAPE '\' OR description LIKE ? ESCAPE '\'
 ORDER BY name COLLATE NOCASE, id`
 
 	updateItemSQL = `
@@ -90,6 +100,14 @@ ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
 SELECT it.item_id, it.tag
 FROM item_tags it
 WHERE it.item_id IN (SELECT id FROM items WHERE container_id = ?)
+ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
+
+	searchItemTagsSQL = `
+SELECT it.item_id, it.tag
+FROM item_tags it
+WHERE it.item_id IN (
+	SELECT id FROM items WHERE name LIKE ? ESCAPE '\' OR description LIKE ? ESCAPE '\'
+)
 ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
 )
 
@@ -153,6 +171,16 @@ func (r *itemRepo) ListByLocation(ctx context.Context, location inventory.Locati
 		return queryItems(ctx, r.db, listItemsByRoomSQL, listItemTagsByRoomSQL, location.ID)
 	}
 	return queryItems(ctx, r.db, listItemsByContainerSQL, listItemTagsByContainerSQL, location.ID)
+}
+
+// Search implements inventory.ItemRepo.
+func (r *itemRepo) Search(ctx context.Context, query string) ([]inventory.Item, error) {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return []inventory.Item{}, nil
+	}
+	pattern := likePattern(trimmed)
+	return queryItems(ctx, r.db, searchItemsSQL, searchItemTagsSQL, pattern, pattern)
 }
 
 // Update implements inventory.ItemRepo.
@@ -372,4 +400,12 @@ func queryItems(ctx context.Context, q querier, query, tagsQuery string, args ..
 		return nil, err
 	}
 	return items, nil
+}
+
+// likePattern turns a search query into a LIKE pattern that matches it as a
+// substring. The query is data, not a pattern: its wildcards are escaped, so
+// searching for "50%" finds a literal "50%" instead of everything.
+func likePattern(query string) string {
+	escaper := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return "%" + escaper.Replace(query) + "%"
 }

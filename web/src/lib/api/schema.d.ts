@@ -167,7 +167,7 @@ export interface paths {
         };
         /**
          * Search the inventory
-         * @description Not implemented yet: the query is accepted and the endpoint answers with 501 until Phase 5 delivers it.
+         * @description Matches the query against item names and descriptions, case-insensitively, and returns the matches ordered by name.
          */
         get: operations["search"];
         put?: never;
@@ -411,7 +411,6 @@ export interface components {
              */
             updated_at: string;
         };
-        SearchOutputBody: Record<string, never>;
     };
     responses: never;
     parameters: never;
@@ -994,7 +993,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SearchOutputBody"];
+                    "application/json": components["schemas"]["ItemResponse"][] | null;
                 };
             };
             /** @description Error */
