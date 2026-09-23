@@ -2,9 +2,17 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { ApiError, apiFetch, type Container, type Problem, type Room } from '$lib/api/client';
+	import {
+		apiFetch,
+		toProblem,
+		type Container,
+		type Item,
+		type Problem,
+		type Room
+	} from '$lib/api/client';
 	import ConfirmButton from '$lib/components/ConfirmButton.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ItemForm, { type ItemDraft } from '$lib/components/ItemForm.svelte';
 	import ProblemPanel from '$lib/components/ProblemPanel.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import { ensureLoaded, inventory, refreshInventory } from '$lib/inventory.svelte';
@@ -34,6 +42,7 @@
 	let containerName = $state('');
 	let containerDescription = $state('');
 	let creatingContainer = $state(false);
+	let creatingItem = $state(false);
 
 	// The edit form is seeded in the event handler, not in an effect.
 	function startEdit() {
@@ -58,10 +67,7 @@
 			saved = true;
 			editing = false;
 		} catch (error) {
-			problem =
-				error instanceof ApiError
-					? error.problem
-					: { title: 'Could not save the room', status: 0, detail: String(error) };
+			problem = toProblem(error, 'Could not save the room');
 		} finally {
 			saving = false;
 		}
@@ -85,12 +91,25 @@
 			containerDescription = '';
 			await refreshInventory();
 		} catch (error) {
-			problem =
-				error instanceof ApiError
-					? error.problem
-					: { title: 'Could not create the container', status: 0, detail: String(error) };
+			problem = toProblem(error, 'Could not create the container');
 		} finally {
 			creatingContainer = false;
+		}
+	}
+
+	async function createItem(draft: ItemDraft) {
+		creatingItem = true;
+		problem = null;
+		try {
+			await apiFetch<Item>('/api/v1/items', {
+				method: 'POST',
+				body: { ...draft, location: { kind: 'room', id: roomId } }
+			});
+			await refreshInventory();
+		} catch (error) {
+			problem = toProblem(error, 'Could not create the item');
+		} finally {
+			creatingItem = false;
 		}
 	}
 
@@ -101,10 +120,7 @@
 			await refreshInventory();
 			await goto(resolve('/rooms'));
 		} catch (error) {
-			problem =
-				error instanceof ApiError
-					? error.problem
-					: { title: 'Could not delete the room', status: 0, detail: String(error) };
+			problem = toProblem(error, 'Could not delete the room');
 		}
 	}
 </script>
@@ -213,17 +229,21 @@
 
 	<section aria-labelledby="items-heading">
 		<h2 id="items-heading">Items in the room</h2>
+		<div class="card create">
+			<h3>New item</h3>
+			<ItemForm saving={creatingItem} onSubmit={createItem} />
+		</div>
 		{#if directItems.length === 0}
 			<EmptyState
 				title="No items directly in this room"
-				hint="Items inside containers are listed in the container view."
+				hint="Create the first item with the form above, or add items inside a container."
 			/>
 		{:else}
 			<ul class="list">
 				{#each directItems as item (item.id)}
 					<li class="card">
 						<p class="name">
-							{item.name}
+							<a href={resolve('/items/[id]', { id: String(item.id) })}>{item.name}</a>
 							{#if item.quantity > 1}<span class="muted">×{item.quantity}</span>{/if}
 						</p>
 						{#if item.description}

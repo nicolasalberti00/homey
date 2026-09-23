@@ -37,6 +37,11 @@ export class ApiError extends Error {
 	}
 }
 
+/** Normalizes any thrown value into the problem document the UI renders. */
+export function toProblem(error: unknown, title: string): Problem {
+	return error instanceof ApiError ? error.problem : { title, status: 0, detail: String(error) };
+}
+
 type FetchOptions = {
 	method?: string;
 	body?: unknown;
