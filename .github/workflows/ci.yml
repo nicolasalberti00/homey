@@ -41,7 +41,7 @@ jobs:
         # coverage its tests get from the tests of other packages too. The
         # "coverage: …% of statements in ./internal/…" lines below are per
         # test binary; the merged, readable numbers come from the next step.
-        run: go test -coverpkg=./internal/... -coverprofile=coverage.out ./...
+        run: go test -coverpkg=./internal/...,./mcp/... -coverprofile=coverage.out ./...
       - name: coverage threshold
         # Prints the coverage of every package and fails below the minimum
         # (75%, defined in cmd/coverage).

@@ -105,6 +105,29 @@ letter without a decomposition keeps its identity, so `søren` does not match
 `soren` and `Straße` does not match `strasse`. The query is a scan of the
 inventory; `TestSearchPerformanceOnLargeInventory` measures it on 10,000 items.
 
+## MCP
+
+homey speaks the Model Context Protocol over the **Streamable HTTP** transport
+at `/mcp`, so an MCP host (Claude, or any other client) can drive the inventory
+through tools instead of raw HTTP. It is **on by default** and switched off with
+`HOMEY_MCP_ENABLED=false` or `--mcp=false`.
+
+The endpoint sits behind the same bearer tokens as the REST API: configure the
+client with a token (`Authorization: Bearer …`), and a request without one is
+answered with `401` and a `WWW-Authenticate` challenge. The tool registry and
+the per-tool permissions arrive with the steps that follow; today the server
+initializes and reports itself.
+
+```bash
+curl -sS -X POST http://127.0.0.1:8080/mcp \
+  -H "Authorization: Bearer $HOMEY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{
+        "protocolVersion":"2025-06-18","capabilities":{},
+        "clientInfo":{"name":"curl","version":"0"}}}'
+```
+
 ## API tokens
 
 Every `/api/v1/` operation requires a bearer token; only the spec, the docs
@@ -169,7 +192,7 @@ go run ./cmd/server serve --listen 127.0.0.1:8080
 Coverage is part of CI and has a floor of 75% over `internal/...`:
 
 ```bash
-go test -coverpkg=./internal/... -coverprofile=coverage.out ./...
+go test -coverpkg=./internal/...,./mcp/... -coverprofile=coverage.out ./...
 go run ./cmd/coverage -profile coverage.out
 ```
 

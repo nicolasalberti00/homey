@@ -11,7 +11,7 @@ Web UI. See `README.md` for the overview, configuration and roadmap.
 - One unit of work (typically a roadmap step) per branch, named `feat/…`, `fix/…`,
   `chore/…`, `ci/…` or `docs/…` (e.g. `feat/phase-2-domain-types`).
 - When the work is complete (`gofmt`, `go vet` and `go test ./...` green, plus the
-  75% coverage floor: `go test -coverpkg=./internal/... -coverprofile=coverage.out ./... && go run ./cmd/coverage`), push the
+  75% coverage floor: `go test -coverpkg=./internal/...,./mcp/... -coverprofile=coverage.out ./... && go run ./cmd/coverage`), push the
   branch and open a pull request with `gh pr create` describing the step and its
   exit criteria.
 - Keep PRs small and focused; leave them for review — do not merge into `main`
