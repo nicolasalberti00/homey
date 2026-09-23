@@ -1,8 +1,8 @@
-// Client-side search over the inventory the app already has (Step 4.8): the
-// server-side endpoint answers 501 until Phase 5, so the dashboard filters
-// the lists it loaded. Pure functions over plain data, no reactive state.
-
-import type { Item } from '$lib/api/client';
+// The terms a query is made of, and the segments the UI marks. Searching
+// itself is the server's job (the REST API, the web UI and the MCP server all
+// present the same ranked candidates); highlighting stays here, because it is
+// a rendering concern over text the page already has. Pure functions over
+// plain data, no reactive state.
 
 /** A piece of text, flagged when it is part of a query match. */
 export type Segment = { text: string; match: boolean };
@@ -14,19 +14,6 @@ export function queryTerms(query: string): string[] {
 		.toLowerCase()
 		.split(/\s+/)
 		.filter((term) => term.length > 0);
-}
-
-/** The fields a query looks at, joined into one lowercase haystack. */
-function haystack(item: Item): string {
-	return [item.name, item.description ?? '', ...(item.tags ?? []), ...(item.aliases ?? [])]
-		.join('\n')
-		.toLowerCase();
-}
-
-/** True when every term appears somewhere in the item's searchable fields. */
-export function matchesTerms(item: Item, terms: string[]): boolean {
-	const text = haystack(item);
-	return terms.every((term) => text.includes(term));
 }
 
 /**

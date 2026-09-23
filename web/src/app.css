@@ -154,6 +154,16 @@ textarea::placeholder {
 	color: var(--muted);
 }
 
+/* Text for screen readers only: announced, never seen. */
+.sr-only {
+	clip-path: inset(50%);
+	height: 1px;
+	overflow: hidden;
+	position: absolute;
+	white-space: nowrap;
+	width: 1px;
+}
+
 /* A section title with its small actions next to it. The title keeps no
    margin of its own: the section around it owns the spacing. */
 .section-head {
