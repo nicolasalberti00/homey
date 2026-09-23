@@ -18,9 +18,9 @@ func writeProfile(t *testing.T, content string) string {
 	return file
 }
 
-func TestSummariseCountsEachBlockOnce(t *testing.T) {
-	// The same block is reported by two test binaries: one covered it, the
-	// other did not. It must count once, and as covered — summing the lines
+func TestLoadCountsEachBlockOnce(t *testing.T) {
+	// -coverpkg reports a block once per test binary: one covered it, the
+	// others did not. It must count once, and as covered — summing the lines
 	// would report a fraction of the real coverage.
 	profile := writeProfile(t, `mode: set
 example.com/app/a/a.go:1.1,2.2 3 1
@@ -29,9 +29,9 @@ example.com/app/a/a.go:3.1,4.2 2 0
 example.com/app/b/b.go:1.1,2.2 5 0
 `)
 
-	report, err := summarise(profile)
+	report, err := load(profile)
 	if err != nil {
-		t.Fatalf("summarise: %v", err)
+		t.Fatalf("load: %v", err)
 	}
 	if len(report) != 2 {
 		t.Fatalf("report = %+v, want two packages", report)
@@ -74,26 +74,27 @@ func TestWriteEnforcesTheMinimum(t *testing.T) {
 	}
 }
 
-func TestSummariseRejectsMalformedProfiles(t *testing.T) {
+func TestLoadRejectsUnusableProfiles(t *testing.T) {
 	cases := []struct {
 		name    string
 		content string
 	}{
+		{"missing mode line", "example.com/app/a/a.go:1.1,2.2 3 1\n"},
 		{"missing counts", "mode: set\nexample.com/app/a/a.go:1.1,2.2\n"},
 		{"statement count is not a number", "mode: set\nexample.com/app/a/a.go:1.1,2.2 three 1\n"},
 		{"count is not a number", "mode: set\nexample.com/app/a/a.go:1.1,2.2 3 one\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := summarise(writeProfile(t, tc.content)); err == nil {
-				t.Fatal("summarise accepted a malformed profile")
+			if _, err := load(writeProfile(t, tc.content)); err == nil {
+				t.Fatal("load accepted an unusable profile")
 			}
 		})
 	}
-}
 
-func TestSummariseRejectsMissingProfile(t *testing.T) {
-	if _, err := summarise(filepath.Join(t.TempDir(), "absent.out")); err == nil {
-		t.Fatal("summarise accepted a missing profile")
-	}
+	t.Run("missing file", func(t *testing.T) {
+		if _, err := load(filepath.Join(t.TempDir(), "absent.out")); err == nil {
+			t.Fatal("load accepted a missing profile")
+		}
+	})
 }

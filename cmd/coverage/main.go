@@ -11,9 +11,11 @@
 //     same block appears many times: summing them reports a fraction of the
 //     real coverage (15% instead of 93% in this repository).
 //
-// This tool reads the profile, counts every block once — covered when any
-// binary covered it — and prints the coverage of each package, lowest first,
-// followed by the total. It exits non-zero when the total is below -min.
+// cover.ParseProfiles parses the profile and merges the samples of a block —
+// the numbers below therefore agree with `go tool cover -func`, which uses the
+// same package. What that tool does not print is a per-package summary, and
+// that is all this command adds: it groups the parsed profiles by package,
+// prints the coverage of each one, lowest first, and fails below -min.
 //
 // Usage:
 //
@@ -22,15 +24,14 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path"
 	"sort"
-	"strconv"
-	"strings"
+
+	"golang.org/x/tools/cover"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 	minimum := flag.Float64("min", 75, "minimum total statement coverage, in percent")
 	flag.Parse()
 
-	report, err := summarise(*profile)
+	report, err := load(*profile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "coverage:", err)
 		os.Exit(1)
@@ -92,68 +93,32 @@ func (r coverageReport) write(w io.Writer, minimum float64) bool {
 	return status == "OK"
 }
 
-// summarise reads a profile and returns the coverage of every package in it,
-// ordered from the lowest coverage to the highest.
-func summarise(profile string) (coverageReport, error) {
-	file, err := os.Open(profile)
+// load parses a coverage profile and groups it by package.
+func load(profile string) (coverageReport, error) {
+	profiles, err := cover.ParseProfiles(profile)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	return summarise(profiles), nil
+}
 
-	// One entry per block, however many test binaries reported it.
-	type block struct {
-		packageOf  string
-		statements int
-		covered    bool
-	}
-	blocks := make(map[string]block)
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" || strings.HasPrefix(line, "mode:") {
-			continue
-		}
-		// <file>:<start>,<end> <statements> <count>
-		key, rest, found := strings.Cut(line, " ")
-		if !found {
-			return nil, fmt.Errorf("malformed profile line %q", line)
-		}
-		fields := strings.Fields(rest)
-		if len(fields) != 2 {
-			return nil, fmt.Errorf("malformed profile line %q", line)
-		}
-		statements, err := strconv.Atoi(fields[0])
-		if err != nil {
-			return nil, fmt.Errorf("malformed statement count in %q: %w", line, err)
-		}
-		count, err := strconv.Atoi(fields[1])
-		if err != nil {
-			return nil, fmt.Errorf("malformed count in %q: %w", line, err)
-		}
-
-		previous := blocks[key]
-		blocks[key] = block{
-			packageOf:  packageOf(key),
-			statements: statements,
-			covered:    count > 0 || previous.covered,
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
+// summarise sums the parsed profiles per package, ordered from the lowest
+// coverage to the highest. Each profile covers one file, and the package is
+// the directory that holds it.
+func summarise(profiles []*cover.Profile) coverageReport {
 	totals := make(map[string]*packageCoverage)
-	for _, b := range blocks {
-		total, ok := totals[b.packageOf]
+	for _, profile := range profiles {
+		pkg := path.Dir(profile.FileName)
+		total, ok := totals[pkg]
 		if !ok {
-			total = &packageCoverage{pkg: b.packageOf}
-			totals[b.packageOf] = total
+			total = &packageCoverage{pkg: pkg}
+			totals[pkg] = total
 		}
-		total.statements += b.statements
-		if b.covered {
-			total.covered += b.statements
+		for _, block := range profile.Blocks {
+			total.statements += block.NumStmt
+			if block.Count > 0 {
+				total.covered += block.NumStmt
+			}
 		}
 	}
 
@@ -167,11 +132,5 @@ func summarise(profile string) (coverageReport, error) {
 		}
 		return report[i].pkg < report[j].pkg
 	})
-	return report, nil
-}
-
-// packageOf turns the file of a profile block into the package that holds it.
-func packageOf(key string) string {
-	file, _, _ := strings.Cut(key, ":")
-	return path.Dir(file)
+	return report
 }

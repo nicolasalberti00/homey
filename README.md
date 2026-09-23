@@ -148,8 +148,10 @@ go run ./cmd/coverage -profile coverage.out
 
 `cmd/coverage` prints the coverage of every package and fails below the
 minimum. The profile is cross-package (`-coverpkg`), so a package counts the
-coverage it gets from other packages' tests — and the tool counts every block
-once, which is what makes the number agree with `go tool cover`.
+coverage it gets from other packages' tests. It reads the profile with
+`golang.org/x/tools/cover`, the parser behind `go tool cover`, which merges the
+samples of a block — `-coverpkg` reports each block once per test binary — so
+the total agrees with `go tool cover -func`.
 
 Migrations run automatically at start-up. Operational helpers:
 
