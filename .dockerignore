@@ -6,3 +6,8 @@ data
 *.md
 !README.md
 deployment
+# The image builds the SPA itself: never ship a local or stale copy.
+web/node_modules
+web/.svelte-kit
+web/build
+internal/webui/dist

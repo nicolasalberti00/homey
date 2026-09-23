@@ -112,6 +112,23 @@ cd web && npm install && npm run dev   # terminal 2 → http://localhost:5173
 `npm run lint`, `npm run check` (both required in CI). API types are
 generated from the contract: `npm run api:generate` in `web/`.
 
+### Single binary
+
+The production build is embedded in the server (Step 4.9), so deployment is
+one binary — no static file server next to it:
+
+```bash
+./scripts/embed-ui.sh        # builds the SPA into internal/webui/dist
+go build ./cmd/server        # self-contained binary, UI included
+```
+
+The Docker image does the same in two stages (`node` builds the SPA, `golang`
+embeds it). The server answers `/` and any client-side route with the shell,
+serves `/_app/immutable/**` with a one-year immutable cache (the filenames are
+content-hashed), revalidates the shell, and keeps unknown `/api/` paths as
+JSON problem documents. A build without the UI — a plain `go build` in a fresh
+clone — answers 404 with a hint instead of a blank page.
+
 ## Development
 
 ```bash
@@ -137,7 +154,7 @@ go run ./cmd/server migrate force <version>
 1. Foundations — repo, configuration, SQLite, migrations, Docker ✅
 2. Inventory core — rooms, containers, items, move, validation ✅
 3. REST API — OpenAPI, auth, tests ✅
-4. Web UI — dashboard, rooms, containers, items, search, themes
+4. Web UI — dashboard, rooms, containers, items, search, themes ✅
 5. Search — aliases, tags, ranking, ambiguity handling
 6. MCP — tool registry, read/write tools, confirmation flow
 7. Hardening — audit events, security review, export/import, docs

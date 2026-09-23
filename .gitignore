@@ -13,6 +13,10 @@ web/node_modules/
 web/.svelte-kit/
 web/build/
 
+# UI build embedded in the binary (scripts/embed-ui.sh fills this tree)
+internal/webui/dist/*
+!internal/webui/dist/.gitkeep
+
 # environment files
 .env
 
