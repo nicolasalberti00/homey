@@ -67,6 +67,7 @@
 	let destination = $state('');
 	let moving = $state(false);
 	let moved = $state(false);
+	let showMove = $state(false);
 
 	function startEdit() {
 		saved = false;
@@ -108,6 +109,7 @@
 			await refreshInventory();
 			destination = '';
 			moved = true;
+			showMove = false;
 		} catch (error) {
 			problem = toProblem(error, 'Could not move the item');
 		} finally {
@@ -197,8 +199,41 @@
 			</p>
 			<div class="actions">
 				<button class="btn" type="button" onclick={startEdit}>Edit</button>
+				<button
+					class="btn"
+					type="button"
+					aria-expanded={showMove}
+					aria-controls="move-item"
+					onclick={() => (showMove = !showMove)}
+				>
+					Move
+				</button>
 				{#if saved}<span class="ok" role="status">Saved.</span>{/if}
+				{#if moved}<span class="ok" role="status">Moved.</span>{/if}
 			</div>
+			{#if showMove}
+				<form id="move-item" class="inline-form" onsubmit={move}>
+					<div class="field">
+						<label for="move-destination">New location</label>
+						<select id="move-destination" bind:value={destination} required>
+							<option value="" disabled>Choose a destination…</option>
+							{#each destinationGroups as group (group.label)}
+								<optgroup label={group.label}>
+									{#each group.options as option (option.value)}
+										<option value={option.value}>{option.label}</option>
+									{/each}
+								</optgroup>
+							{/each}
+						</select>
+					</div>
+					<div class="actions">
+						<button class="btn" type="submit" disabled={moving || destination === ''}>
+							{moving ? 'Moving…' : 'Move'}
+						</button>
+						<button class="btn" type="button" onclick={() => (showMove = false)}>Cancel</button>
+					</div>
+				</form>
+			{/if}
 		{/if}
 	</section>
 
@@ -207,31 +242,6 @@
 			<ProblemPanel title="The operation failed" {problem} />
 		</div>
 	{/if}
-
-	<section class="card" aria-labelledby="move-heading">
-		<h2 id="move-heading">Move this item</h2>
-		<form onsubmit={move}>
-			<div class="field">
-				<label for="move-destination">New location</label>
-				<select id="move-destination" bind:value={destination} required>
-					<option value="" disabled>Choose a destination…</option>
-					{#each destinationGroups as group (group.label)}
-						<optgroup label={group.label}>
-							{#each group.options as option (option.value)}
-								<option value={option.value}>{option.label}</option>
-							{/each}
-						</optgroup>
-					{/each}
-				</select>
-			</div>
-			<div class="actions">
-				<button class="btn" type="submit" disabled={moving || destination === ''}>
-					{moving ? 'Moving…' : 'Move'}
-				</button>
-				{#if moved}<span class="ok" role="status">Moved.</span>{/if}
-			</div>
-		</form>
-	</section>
 
 	<section class="card danger-zone" aria-labelledby="danger-heading">
 		<h2 id="danger-heading">Delete this item</h2>
@@ -274,6 +284,13 @@
 
 	.field {
 		margin-bottom: 0.75rem;
+	}
+
+	/* A form that unfolds inside a card, separated from its summary. */
+	.inline-form {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
 	}
 
 	.actions {
