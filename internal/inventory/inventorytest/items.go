@@ -771,6 +771,87 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
+	t.Run("SearchFindsSimilarNames", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		location := inventory.RoomLocation(room.ID)
+		bosch := inventory.Item{
+			Name:        "Bosch drill",
+			Description: "cordless hammer drill, 18V",
+			Quantity:    1,
+			Location:    location,
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &bosch), "creating the Bosch drill")
+		createItem(t, repos, "Makita drill", location)
+		createItem(t, repos, "Cordless drill", location)
+		createItem(t, repos, "Drill bits", location)
+		createItem(t, repos, "Hammer", location)
+
+		// A brand and a kind together select the one item carrying both,
+		// wherever the terms matched: the name for the brand, the description
+		// for the kind.
+		matches, err := repos.Items.Search(ctx, "bosch cordless 18v")
+		requiresNoError(t, err, "Search bosch cordless 18v")
+		if names := itemNames(matches); !slices.Equal(names, []string{"Bosch drill"}) {
+			t.Fatalf("Search(bosch cordless 18v) = %v, want [Bosch drill]", names)
+		}
+
+		// A term no item carries empties the list, however well the others
+		// match.
+		matches, err = repos.Items.Search(ctx, "makita cordless")
+		requiresNoError(t, err, "Search makita cordless")
+		if len(matches) != 0 {
+			t.Fatalf("Search(makita cordless) = %v, want no matches", itemNames(matches))
+		}
+
+		// "drill" alone is ambiguous: every drill comes back, name-ordered,
+		// for the caller to rank and present.
+		matches, err = repos.Items.Search(ctx, "drill")
+		requiresNoError(t, err, "Search drill")
+		want := []string{"Bosch drill", "Cordless drill", "Drill bits", "Makita drill"}
+		if names := itemNames(matches); !slices.Equal(names, want) {
+			t.Fatalf("Search(drill) = %v, want %v", names, want)
+		}
+	})
+
+	t.Run("SearchMatchesAccents", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Cucina")
+		location := inventory.RoomLocation(room.ID)
+		coffee := inventory.Item{
+			Name:     "Caffettiera",
+			Quantity: 1,
+			Aliases:  []string{"moka"},
+			Tags:     []string{"caffè"},
+			Location: location,
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &coffee), "creating the coffee maker")
+		createItem(t, repos, "Tazze", location)
+
+		// An accented term matches the accented text it was typed from, and
+		// the ASCII letters around it keep ignoring case. Folding non-ASCII
+		// letters is the adapter's business: SQLite's LIKE folds ASCII only,
+		// so "CAFFÈ" would not match "caffè" (see the README).
+		for _, query := range []string{"caffè", "Caffè", "CAFFETTIERA", "caffetti", "MOKA"} {
+			matches, err := repos.Items.Search(ctx, query)
+			requiresNoError(t, err, "Search "+query)
+			if names := itemNames(matches); !slices.Equal(names, []string{"Caffettiera"}) {
+				t.Fatalf("Search(%q) = %v, want [Caffettiera]", query, names)
+			}
+		}
+
+		// An accented term that no label carries matches nothing.
+		matches, err := repos.Items.Search(ctx, "però")
+		requiresNoError(t, err, "Search però")
+		if len(matches) != 0 {
+			t.Fatalf("Search(però) = %v, want no matches", itemNames(matches))
+		}
+	})
+
 	t.Run("SearchIgnoresNotes", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
