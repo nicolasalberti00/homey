@@ -8,6 +8,8 @@ export type InventoryIndex = {
 	/** "Garage > Toolbox > Drawer 1" for a container, or "Garage" for a room. */
 	containerPath(id: number): string;
 	locationLabel(location: LocationRef): string;
+	/** The room an item location sits in, or undefined when unknown. */
+	locationRoomId(location: LocationRef): number | undefined;
 	/** Ancestors first, the container itself last; empty when unknown. */
 	containerChain(id: number): Container[];
 	/** The container itself plus every descendant (for move destinations). */
@@ -64,11 +66,19 @@ export function buildIndex(roomList: Room[], containerList: Container[]): Invent
 		return roomNames.get(location.id) ?? `room ${location.id}`;
 	}
 
+	function locationRoomId(location: LocationRef): number | undefined {
+		if (location.kind === 'room') {
+			return roomNames.has(location.id) ? location.id : undefined;
+		}
+		return byId.get(location.id)?.room_id;
+	}
+
 	return {
 		roomName: (id) => roomNames.get(id) ?? `room ${id}`,
 		containerPath,
 		containerChain,
 		subtreeIds,
-		locationLabel
+		locationLabel,
+		locationRoomId
 	};
 }

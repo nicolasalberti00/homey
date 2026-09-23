@@ -19,6 +19,7 @@
 	--ok-soft: light-dark(#dcfce7, #0d2818);
 	--danger: light-dark(#b91c1c, #f87171);
 	--danger-soft: light-dark(#fee2e2, #2d1214);
+	--mark: light-dark(#fde68a, #5a2c06);
 
 	--radius: 10px;
 	--shadow: 0 1px 2px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.45));
@@ -72,6 +73,13 @@ code {
 	border-radius: 5px;
 	padding: 0.1rem 0.3rem;
 	font-size: 0.9em;
+}
+
+mark {
+	background: var(--mark);
+	border-radius: 3px;
+	color: inherit;
+	padding: 0 0.15em;
 }
 
 input,
