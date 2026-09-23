@@ -29,7 +29,10 @@
 			id: 'rooms',
 			label: 'Rooms',
 			href: rooms,
-			matches: (path) => path === rooms || path.startsWith(`${rooms}/`)
+			// Container detail pages belong to the Rooms section: they are only
+			// reachable through a room and keep its nav entry active.
+			matches: (path) =>
+				path === rooms || path.startsWith(`${rooms}/`) || path.startsWith('/containers/')
 		},
 		{
 			id: 'settings',

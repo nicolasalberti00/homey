@@ -2,23 +2,23 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { ApiError, apiFetch, type Problem, type Room } from '$lib/api/client';
+	import { ApiError, apiFetch, type Container, type Problem, type Room } from '$lib/api/client';
 	import ConfirmButton from '$lib/components/ConfirmButton.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ProblemPanel from '$lib/components/ProblemPanel.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
 	import { ensureLoaded, inventory, refreshInventory } from '$lib/inventory.svelte';
-	import { buildIndex } from '$lib/paths';
 
 	// Single-page app: kick the shared load off once, without an effect.
 	void ensureLoaded();
 
 	const inv = $derived(inventory());
-	const index = $derived(buildIndex(inv.rooms, inv.containers));
 	const roomId = $derived(Number(page.params.id));
 	const room = $derived(inv.rooms.find((candidate) => candidate.id === roomId));
 	const roomContainers = $derived(
-		inv.containers.filter((container) => container.room_id === roomId)
+		inv.containers.filter(
+			(container) => container.room_id === roomId && container.parent_id === undefined
+		)
 	);
 	const directItems = $derived(
 		inv.items.filter((item) => item.location.kind === 'room' && item.location.id === roomId)
@@ -30,6 +30,10 @@
 	let saving = $state(false);
 	let saved = $state(false);
 	let problem = $state<Problem | null>(null);
+
+	let containerName = $state('');
+	let containerDescription = $state('');
+	let creatingContainer = $state(false);
 
 	// The edit form is seeded in the event handler, not in an effect.
 	function startEdit() {
@@ -60,6 +64,33 @@
 					: { title: 'Could not save the room', status: 0, detail: String(error) };
 		} finally {
 			saving = false;
+		}
+	}
+
+	async function createContainer(event: SubmitEvent) {
+		event.preventDefault();
+		if (!room) return;
+		creatingContainer = true;
+		problem = null;
+		try {
+			await apiFetch<Container>('/api/v1/containers', {
+				method: 'POST',
+				body: {
+					name: containerName.trim(),
+					description: containerDescription.trim(),
+					room_id: roomId
+				}
+			});
+			containerName = '';
+			containerDescription = '';
+			await refreshInventory();
+		} catch (error) {
+			problem =
+				error instanceof ApiError
+					? error.problem
+					: { title: 'Could not create the container', status: 0, detail: String(error) };
+		} finally {
+			creatingContainer = false;
 		}
 	}
 
@@ -130,14 +161,47 @@
 
 	<section aria-labelledby="containers-heading">
 		<h2 id="containers-heading">Containers</h2>
+		<form class="card create" onsubmit={createContainer}>
+			<h3>New container</h3>
+			<div class="field">
+				<label for="container-name">Name</label>
+				<input
+					id="container-name"
+					bind:value={containerName}
+					required
+					maxlength="120"
+					autocomplete="off"
+				/>
+			</div>
+			<div class="field">
+				<label for="container-description">
+					Description <span class="muted">(optional)</span>
+				</label>
+				<input
+					id="container-description"
+					bind:value={containerDescription}
+					maxlength="2000"
+					autocomplete="off"
+				/>
+			</div>
+			<button class="btn primary" type="submit" disabled={creatingContainer}>
+				{creatingContainer ? 'Creating…' : 'Create container'}
+			</button>
+		</form>
 		{#if roomContainers.length === 0}
-			<EmptyState title="No containers in this room" hint="Container management arrives next." />
+			<EmptyState
+				title="No containers in this room"
+				hint="Create the first container with the form above."
+			/>
 		{:else}
 			<ul class="list">
 				{#each roomContainers as container (container.id)}
 					<li class="card">
-						<p class="name">{container.name}</p>
-						<p class="muted path">{index.containerPath(container.id)}</p>
+						<p class="name">
+							<a href={resolve('/containers/[id]', { id: String(container.id) })}
+								>{container.name}</a
+							>
+						</p>
 						{#if container.description}
 							<p class="muted">{container.description}</p>
 						{/if}
@@ -192,6 +256,16 @@
 		margin: 0 0 0.5rem;
 	}
 
+	.create {
+		max-width: 32rem;
+		margin-bottom: 1.5rem;
+	}
+
+	.create h3 {
+		margin: 0 0 0.75rem;
+		font-size: 1rem;
+	}
+
 	section {
 		margin-top: 1.5rem;
 	}
@@ -227,7 +301,6 @@
 		font-weight: 600;
 	}
 
-	.path,
 	.list p {
 		margin: 0.15rem 0 0;
 		font-size: 0.9rem;
