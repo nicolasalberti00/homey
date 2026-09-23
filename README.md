@@ -78,6 +78,34 @@ Regenerate the contract after changing any operation:
 go run ./cmd/openapi > api/openapi.yaml
 ```
 
+## Search
+
+`GET /api/v1/search?q=…` is the single search behind the REST API, the web UI
+and the MCP server: all three present the same candidates.
+
+**Matching.** The query is split on whitespace and **every term must match**, in
+any order. A term matches when it appears anywhere in the item's name,
+description, aliases or tags — case-insensitively and as a plain substring, so
+`rapa` finds `Trapano`. Notes are not searched, `%` and `_` are literal
+characters rather than wildcards, and a blank query matches nothing. `q` is
+required and holds 1–200 characters.
+
+**Ranking.** Best match first: the field decides (name > alias > tag >
+description), then how closely it matched (exact > prefix > partial). A partial
+match in the name therefore beats an exact tag. Candidates of equal rank keep
+the listing order (by name).
+
+**Results.** Every candidate carries the item, the path of its location
+(`Garage > Toolbox > Drawer 1`) and why it matched (`match.field` and
+`match.kind`) — which is what makes an ambiguous query answerable without a
+second lookup.
+
+**Known limits.** Matching folds ASCII case only: an accented letter has to be
+typed as it is stored (`caffè`, not `CAFFÈ`), and no Unicode normalization is
+applied, so a letter written as one code point and as a base letter plus a
+combining accent are different strings. The query is a scan of the inventory;
+`TestSearchPerformanceOnLargeInventory` measures it on 10,000 items.
+
 ## API tokens
 
 Every `/api/v1/` operation requires a bearer token; only the spec, the docs

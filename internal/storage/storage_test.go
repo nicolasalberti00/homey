@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func mustMigrate(t *testing.T) string {
+func mustMigrate(t testing.TB) string {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "homey.db")
 	if err := MigrateUp(dbPath); err != nil {
@@ -15,7 +15,7 @@ func mustMigrate(t *testing.T) string {
 	return dbPath
 }
 
-func openDB(t *testing.T, dbPath string) *sql.DB {
+func openDB(t testing.TB, dbPath string) *sql.DB {
 	t.Helper()
 	db, err := Open(dbPath)
 	if err != nil {
