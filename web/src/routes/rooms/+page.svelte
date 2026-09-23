@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { ApiError, apiFetch, type Problem, type Room } from '$lib/api/client';
+	import AddButton from '$lib/components/AddButton.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ProblemPanel from '$lib/components/ProblemPanel.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
@@ -15,6 +16,7 @@
 	let description = $state('');
 	let saving = $state(false);
 	let problem = $state<Problem | null>(null);
+	let showCreate = $state(false);
 
 	async function createRoom(event: SubmitEvent) {
 		event.preventDefault();
@@ -27,6 +29,7 @@
 			});
 			name = '';
 			description = '';
+			showCreate = false;
 			await refreshInventory();
 		} catch (error) {
 			problem =
@@ -56,22 +59,35 @@
 
 <svelte:head><title>Rooms · homey</title></svelte:head>
 
-<h1>Rooms</h1>
+<div class="section-head">
+	<h1>Rooms</h1>
+	<AddButton
+		label="New room"
+		expanded={showCreate}
+		controls="create-room"
+		onToggle={() => (showCreate = !showCreate)}
+	/>
+</div>
 
-<form class="card create" onsubmit={createRoom}>
-	<h2>New room</h2>
-	<div class="field">
-		<label for="room-name">Name</label>
-		<input id="room-name" bind:value={name} required maxlength="120" autocomplete="off" />
-	</div>
-	<div class="field">
-		<label for="room-description">Description <span class="muted">(optional)</span></label>
-		<input id="room-description" bind:value={description} maxlength="2000" autocomplete="off" />
-	</div>
-	<button class="btn primary" type="submit" disabled={saving}>
-		{saving ? 'Creating…' : 'Create room'}
-	</button>
-</form>
+{#if showCreate}
+	<form id="create-room" class="card create" onsubmit={createRoom}>
+		<h2>New room</h2>
+		<div class="field">
+			<label for="room-name">Name</label>
+			<input id="room-name" bind:value={name} required maxlength="120" autocomplete="off" />
+		</div>
+		<div class="field">
+			<label for="room-description">Description <span class="muted">(optional)</span></label>
+			<input id="room-description" bind:value={description} maxlength="2000" autocomplete="off" />
+		</div>
+		<div class="actions">
+			<button class="btn primary" type="submit" disabled={saving}>
+				{saving ? 'Creating…' : 'Create room'}
+			</button>
+			<button class="btn" type="button" onclick={() => (showCreate = false)}>Cancel</button>
+		</div>
+	</form>
+{/if}
 
 {#if problem}
 	<div class="spaced">
@@ -89,7 +105,7 @@
 	{/if}
 {:else if inv.rooms.length === 0}
 	<div class="spaced">
-		<EmptyState title="No rooms yet" hint="Create the first room with the form above." />
+		<EmptyState title="No rooms yet" hint="Add the first one with + next to the title." />
 	</div>
 {:else}
 	<ul class="rooms">
@@ -117,6 +133,21 @@
 <style>
 	.create {
 		margin-bottom: 1.5rem;
+	}
+
+	.create h2 {
+		margin: 0 0 0.75rem;
+		font-size: 1rem;
+	}
+
+	.field {
+		margin-bottom: 0.75rem;
+	}
+
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
 	}
 
 	.field {

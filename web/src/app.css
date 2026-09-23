@@ -153,3 +153,17 @@ textarea::placeholder {
 .muted {
 	color: var(--muted);
 }
+
+/* A section title with its small actions next to it. The title keeps no
+   margin of its own: the section around it owns the spacing. */
+.section-head {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	margin-bottom: 0.75rem;
+}
+
+.section-head h1,
+.section-head h2 {
+	margin: 0;
+}
