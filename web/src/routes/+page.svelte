@@ -157,10 +157,6 @@
 		margin-top: 1.5rem;
 	}
 
-	.field {
-		max-width: 32rem;
-	}
-
 	.field p {
 		margin: 0.35rem 0 0;
 		font-size: 0.9rem;

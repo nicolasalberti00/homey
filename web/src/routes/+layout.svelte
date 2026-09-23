@@ -243,7 +243,6 @@
 	}
 
 	main {
-		max-width: 64rem;
 		padding: 1.5rem;
 		width: 100%;
 	}
