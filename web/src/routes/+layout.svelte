@@ -1,7 +1,9 @@
 <script lang="ts">
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { getLastLocation, rememberLocation } from '$lib/last-location';
 	import type { Snippet } from 'svelte';
 
 	import '../app.css';
@@ -14,15 +16,119 @@
 	const rooms = resolve('/rooms');
 	const settings = resolve('/settings');
 
-	function isCurrent(href: string): boolean {
-		const current = page.url.pathname;
-		return href === home ? current === home : current.startsWith(href);
+	type Section = {
+		id: string;
+		label: string;
+		href: string;
+		matches: (path: string) => boolean;
+	};
+
+	const sections: Section[] = [
+		{ id: 'dashboard', label: 'Dashboard', href: home, matches: (path) => path === home },
+		{
+			id: 'rooms',
+			label: 'Rooms',
+			href: rooms,
+			matches: (path) => path === rooms || path.startsWith(`${rooms}/`)
+		},
+		{
+			id: 'settings',
+			label: 'Settings',
+			href: settings,
+			matches: (path) => path === settings || path.startsWith(`${settings}/`)
+		}
+	];
+
+	function sectionOf(path: string): Section | undefined {
+		return sections.find((section) => section.matches(path));
+	}
+
+	function currentLocation(): string {
+		return page.url.pathname + page.url.search;
+	}
+
+	// Scroll offset to apply once the page a sidebar click resumes renders,
+	// keyed by the target so a superseded navigation cannot consume it.
+	let pending: { path: string; y: number } | null = null;
+
+	function rememberHere(): void {
+		const section = sectionOf(page.url.pathname);
+		if (section) rememberLocation(section.id, currentLocation(), window.scrollY);
+	}
+
+	function onVisibilityChange(): void {
+		if (document.visibilityState === 'hidden') rememberHere();
+	}
+
+	// Keep each section's entry fresh: before leaving a page, when the tab goes
+	// away (reload/close) and after a navigation that changed the page.
+	beforeNavigate(rememberHere);
+
+	afterNavigate(() => {
+		const section = sectionOf(page.url.pathname);
+		if (!section) return;
+
+		if (pending) {
+			const { path, y } = pending;
+			pending = null;
+			if (path === currentLocation()) {
+				rememberLocation(section.id, path, y);
+				restoreScroll(y);
+				return;
+			}
+		}
+
+		// Back/forward and reloads are restored by SvelteKit: keep the stored
+		// position instead of overwriting it with the transient one.
+		if (getLastLocation(section.id)?.path === currentLocation()) return;
+		rememberLocation(section.id, currentLocation(), window.scrollY);
+	});
+
+	// A click on an inactive section resumes its last page; a click on the
+	// active one goes to the root (always a one-click way out).
+	function followSection(event: MouseEvent, section: Section): void {
+		if (event.defaultPrevented || event.button !== 0) return;
+		if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+		if (section.matches(page.url.pathname)) return;
+
+		const stored = getLastLocation(section.id);
+		if (!stored) return;
+
+		event.preventDefault();
+		pending = { path: stored.path, y: stored.y };
+		// The stored path is a URL pathname, not a route id: resolve() cannot
+		// rewrite it. The entry was produced by a resolve()-based href.
+		// eslint-disable-next-line svelte/no-navigation-without-resolve
+		goto(stored.path).catch(() => {
+			if (pending?.path === stored.path) pending = null;
+		});
+	}
+
+	// The resumed page may still be loading its data: wait (briefly) until the
+	// document is tall enough for the stored offset.
+	function restoreScroll(y: number): void {
+		const target = currentLocation();
+		const deadline = performance.now() + 1000;
+		const attempt = () => {
+			if (currentLocation() !== target) return; // navigated away meanwhile
+			const max = document.documentElement.scrollHeight - window.innerHeight;
+			if (max >= y || performance.now() >= deadline) {
+				window.scrollTo(0, y);
+				return;
+			}
+			requestAnimationFrame(attempt);
+		};
+		requestAnimationFrame(attempt);
 	}
 </script>
 
 <!-- In-page anchor, not a SvelteKit route: no resolve() needed. -->
 <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 <a class="skip" href="#main">Skip to content</a>
+
+<!-- Flush the remembered location when the tab is reloaded/closed or hidden. -->
+<svelte:window onpagehide={rememberHere} />
+<svelte:document onvisibilitychange={onVisibilityChange} />
 
 <div class="shell">
 	<aside class="sidebar">
@@ -31,27 +137,21 @@
 			homey
 		</p>
 		<nav aria-label="Main">
-			<a
-				href={resolve('/')}
-				class:active={isCurrent(home)}
-				aria-current={isCurrent(home) ? 'page' : undefined}
-			>
-				Dashboard
-			</a>
-			<a
-				href={resolve('/rooms')}
-				class:active={isCurrent(rooms)}
-				aria-current={isCurrent(rooms) ? 'page' : undefined}
-			>
-				Rooms
-			</a>
-			<a
-				href={resolve('/settings')}
-				class:active={isCurrent(settings)}
-				aria-current={isCurrent(settings) ? 'page' : undefined}
-			>
-				Settings
-			</a>
+			<!-- The hrefs are resolve() outputs kept in `sections`; the rule cannot
+			     trace them through the array. -->
+			<!-- eslint-disable svelte/no-navigation-without-resolve -->
+			{#each sections as section (section.id)}
+				{@const active = section.matches(page.url.pathname)}
+				<a
+					href={section.href}
+					class:active
+					aria-current={active ? 'page' : undefined}
+					onclick={(event) => followSection(event, section)}
+				>
+					{section.label}
+				</a>
+			{/each}
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 		</nav>
 		<div class="footer">
 			<ThemeToggle />
