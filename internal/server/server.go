@@ -68,7 +68,7 @@ func newHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB, ui fs.FS) h
 		Logger: logger,
 	})
 
-	// Everything else is the embedded single-page app (Step 4.9). The pattern
+	// Everything else is the embedded single-page app. The pattern
 	// is method-scoped so unknown methods keep the mux's 405 behaviour.
 	mux.Handle("GET /", newSPAHandler(ui))
 

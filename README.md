@@ -114,8 +114,8 @@ generated from the contract: `npm run api:generate` in `web/`.
 
 ### Single binary
 
-The production build is embedded in the server (Step 4.9), so deployment is
-one binary — no static file server next to it:
+The production build is embedded in the server, so deployment is one binary —
+no static file server next to it:
 
 ```bash
 ./scripts/embed-ui.sh        # builds the SPA into internal/webui/dist

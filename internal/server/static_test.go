@@ -1,6 +1,6 @@
 package server
 
-// Tests for the embedded SPA handler (Step 4.9): the routing rules are the
+// Tests for the embedded SPA handler: the routing rules are the
 // interesting part — the shell fallback, the cache policy of hashed assets,
 // JSON for unknown API paths and the honest 404 of a UI-less build.
 

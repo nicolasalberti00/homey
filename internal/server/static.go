@@ -1,6 +1,6 @@
 package server
 
-// The built single-page app ships inside the binary (Step 4.9). The handler
+// The built single-page app ships inside the binary. The handler
 // serves the embedded files, falls back to index.html so client-side routes
 // survive a reload, and keeps unknown /api/ paths JSON: an API client must
 // never receive the HTML shell.

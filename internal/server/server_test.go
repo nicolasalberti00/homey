@@ -121,7 +121,7 @@ func TestUnknownPathIsNotFound(t *testing.T) {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 	// The SPA fallback must not swallow API paths: the answer stays a JSON
-	// problem document (Step 4.9).
+	// problem document.
 	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/problem+json") {
 		t.Errorf("Content-Type = %q, want a problem document", got)
 	}

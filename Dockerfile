@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # ---- web stage -------------------------------------------------------------
-# The SPA is built first: the Go build embeds its output into the binary
-# (Step 4.9), so the runtime image stays a single binary with no static files.
+# The SPA is built first: the Go build embeds its output into the binary, so
+# the runtime image stays a single binary with no static files.
 FROM node:24-alpine AS web
 
 WORKDIR /src/web
