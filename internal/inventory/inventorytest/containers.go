@@ -158,6 +158,33 @@ func testContainers(t *testing.T, newRepos NewRepos) {
 		requiresError(t, err, inventory.ErrNotFound, "ListByRoom")
 	})
 
+	t.Run("ListSpansRoomsAndIsOrdered", func(t *testing.T) {
+		repos := newRepos(t)
+		garage := createRoom(t, repos, "Garage")
+		kitchen := createRoom(t, repos, "Kitchen")
+
+		createContainer(t, repos, kitchen, nil, "Cupboard")
+		createContainer(t, repos, garage, nil, "Toolbox")
+		createContainer(t, repos, garage, nil, "Bench")
+
+		containers, err := repos.Containers.List(t.Context())
+		requiresNoError(t, err, "List")
+
+		want := []string{"Bench", "Toolbox", "Cupboard"}
+		if got := containerNames(containers); !slices.Equal(got, want) {
+			t.Fatalf("List = %v, want %v (rooms in creation order, names sorted)", got, want)
+		}
+	})
+
+	t.Run("ListEmpty", func(t *testing.T) {
+		repos := newRepos(t)
+		containers, err := repos.Containers.List(t.Context())
+		requiresNoError(t, err, "List")
+		if len(containers) != 0 {
+			t.Fatalf("List = %+v, want empty", containers)
+		}
+	})
+
 	t.Run("GetUnknownContainer", func(t *testing.T) {
 		repos := newRepos(t)
 		_, err := repos.Containers.Get(t.Context(), 4242)

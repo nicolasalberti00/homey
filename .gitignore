@@ -21,3 +21,6 @@ AGENTS.override.md
 
 # macOS
 .DS_Store
+
+# dev.sh token file (development only)
+*.db.token

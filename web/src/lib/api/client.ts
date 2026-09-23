@@ -19,6 +19,10 @@ export type Problem = {
 };
 
 export type Room = components['schemas']['RoomResponse'];
+export type Container = components['schemas']['ContainerResponse'];
+export type ContainerDetail = components['schemas']['ContainerDetail'];
+export type Item = components['schemas']['ItemResponse'];
+export type LocationRef = components['schemas']['LocationRef'];
 
 /** ApiError carries the RFC 9457 problem document of a failed request. */
 export class ApiError extends Error {

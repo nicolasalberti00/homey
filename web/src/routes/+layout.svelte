@@ -11,6 +11,7 @@
 	// Literal routes keep resolve() type-checked; the nav grows with the
 	// coming steps.
 	const home = resolve('/');
+	const rooms = resolve('/rooms');
 	const settings = resolve('/settings');
 
 	function isCurrent(href: string): boolean {
@@ -36,6 +37,13 @@
 				aria-current={isCurrent(home) ? 'page' : undefined}
 			>
 				Dashboard
+			</a>
+			<a
+				href={resolve('/rooms')}
+				class:active={isCurrent(rooms)}
+				aria-current={isCurrent(rooms) ? 'page' : undefined}
+			>
+				Rooms
 			</a>
 			<a
 				href={resolve('/settings')}

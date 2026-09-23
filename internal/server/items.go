@@ -218,6 +218,8 @@ func newItemResponse(item inventory.Item) ItemResponse {
 		Notes:       item.Notes,
 		Tags:        tags,
 		Location:    fromLocation(item.Location),
+		CreatedAt:   item.CreatedAt,
+		UpdatedAt:   item.UpdatedAt,
 	}
 }
 

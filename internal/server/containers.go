@@ -20,10 +20,18 @@ func RegisterContainers(api huma.API, deps Deps) {
 		OperationID: "list-containers",
 		Method:      http.MethodGet,
 		Path:        "/containers",
-		Summary:     "List the containers of a room",
+		Summary:     "List containers",
 		Tags:        []string{"Containers"},
 	}, func(ctx context.Context, input *ContainerListInput) (*ContainerListOutput, error) {
-		containers, err := deps.Repos.Containers.ListByRoom(ctx, inventory.RoomID(input.RoomID))
+		var (
+			containers []inventory.Container
+			err        error
+		)
+		if input.RoomID == 0 {
+			containers, err = deps.Repos.Containers.List(ctx)
+		} else {
+			containers, err = deps.Repos.Containers.ListByRoom(ctx, inventory.RoomID(input.RoomID))
+		}
 		if err != nil {
 			return nil, mapError(deps, err)
 		}
@@ -220,7 +228,7 @@ type ContainerDetailOutput struct {
 }
 
 type ContainerListInput struct {
-	RoomID int64 `query:"room_id" format:"int64" doc:"List the containers of this room, at any nesting depth."`
+	RoomID int64 `query:"room_id" format:"int64" doc:"Only containers of this room. Zero lists every room."`
 }
 
 type ContainerListOutput struct {

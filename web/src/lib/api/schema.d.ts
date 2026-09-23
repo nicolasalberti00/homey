@@ -11,7 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the containers of a room */
+        /** List containers */
         get: operations["list-containers"];
         put?: never;
         /** Create a container */
@@ -424,7 +424,7 @@ export interface operations {
     "list-containers": {
         parameters: {
             query?: {
-                /** @description List the containers of this room, at any nesting depth. */
+                /** @description Only containers of this room. Zero lists every room. */
                 room_id?: number;
             };
             header?: never;
