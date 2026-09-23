@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -121,16 +122,21 @@ FROM item_aliases ia
 WHERE ia.item_id IN (SELECT id FROM items WHERE container_id = ?)
 ORDER BY ia.item_id, ia.alias COLLATE NOCASE, ia.alias`
 
-	// A search match is a case-insensitive substring of the item's name, its
-	// description, one of its aliases or one of its tags. The predicate is
-	// composed into the statements below at compile time, so it stays in one
-	// place; it always carries four ? placeholders, all bound to the same
-	// pattern. LIKE folds ASCII case, the same folding the COLLATE NOCASE
-	// ordering uses.
-	searchMatchSQL = `name LIKE ? ESCAPE '\'` +
-		` OR description LIKE ? ESCAPE '\'` +
-		` OR EXISTS (SELECT 1 FROM item_aliases a WHERE a.item_id = items.id AND a.alias LIKE ? ESCAPE '\')` +
-		` OR EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND t.tag LIKE ? ESCAPE '\')`
+	// A search match needs every term of the query to hit the name, the
+	// description, an alias or a tag. The terms travel as one JSON array
+	// parameter and json_each turns it into rows, so the predicate keeps a
+	// single ? however many terms the query has. The patterns arrive escaped
+	// (see searchPatterns); LIKE folds ASCII case, the same folding the
+	// COLLATE NOCASE ordering uses.
+	searchMatchSQL = `NOT EXISTS (
+	SELECT 1 FROM json_each(?) AS term
+	WHERE NOT (
+		name LIKE '%' || term.value || '%' ESCAPE '\'
+		OR description LIKE '%' || term.value || '%' ESCAPE '\'
+		OR EXISTS (SELECT 1 FROM item_aliases a WHERE a.item_id = items.id AND a.alias LIKE '%' || term.value || '%' ESCAPE '\')
+		OR EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND t.tag LIKE '%' || term.value || '%' ESCAPE '\')
+	)
+)`
 
 	searchItemsSQL = `
 SELECT id, room_id, container_id, name, description, quantity, notes, created_at, updated_at
@@ -224,13 +230,15 @@ func (r *itemRepo) ListByLocation(ctx context.Context, location inventory.Locati
 
 // Search implements inventory.ItemRepo.
 func (r *itemRepo) Search(ctx context.Context, query string) ([]inventory.Item, error) {
-	trimmed := strings.TrimSpace(query)
-	if trimmed == "" {
+	terms := inventory.SearchTerms(query)
+	if len(terms) == 0 {
 		return []inventory.Item{}, nil
 	}
-	pattern := likePattern(trimmed)
-	return queryItems(ctx, r.db, searchItemsSQL, searchItemTagsSQL, searchItemAliasesSQL,
-		pattern, pattern, pattern, pattern)
+	patterns, err := searchPatterns(terms)
+	if err != nil {
+		return nil, err
+	}
+	return queryItems(ctx, r.db, searchItemsSQL, searchItemTagsSQL, searchItemAliasesSQL, patterns)
 }
 
 // Update implements inventory.ItemRepo.
@@ -536,10 +544,24 @@ func queryItems(ctx context.Context, q querier, query, tagsQuery, aliasesQuery s
 	return items, nil
 }
 
-// likePattern turns a search query into a LIKE pattern that matches it as a
-// substring. The query is data, not a pattern: its wildcards are escaped, so
-// searching for "50%" finds a literal "50%" instead of everything.
-func likePattern(query string) string {
+// searchPatterns renders the terms of a query as the JSON array of escaped
+// LIKE patterns the search statements expect. The terms are data, not
+// patterns: their wildcards are escaped, so searching for "50%" finds a
+// literal "50%" instead of everything.
+func searchPatterns(terms []string) (string, error) {
+	escaped := make([]string, len(terms))
+	for index, term := range terms {
+		escaped[index] = likeEscape(term)
+	}
+	payload, err := json.Marshal(escaped)
+	if err != nil {
+		return "", fmt.Errorf("encoding search terms: %w", err)
+	}
+	return string(payload), nil
+}
+
+// likeEscape escapes the LIKE wildcards of one term.
+func likeEscape(term string) string {
 	escaper := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return "%" + escaper.Replace(query) + "%"
+	return escaper.Replace(term)
 }

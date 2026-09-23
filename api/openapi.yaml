@@ -389,6 +389,45 @@ components:
         - created_at
         - updated_at
       type: object
+    SearchMatch:
+      additionalProperties: false
+      properties:
+        field:
+          description: Item field the query matched.
+          enum:
+            - name
+            - alias
+            - tag
+            - description
+          type: string
+        kind:
+          description: "How closely the field matched: the field is the term, starts with it, or contains it somewhere else."
+          enum:
+            - exact
+            - prefix
+            - partial
+          type: string
+      required:
+        - field
+        - kind
+      type: object
+    SearchResult:
+      additionalProperties: false
+      properties:
+        item:
+          $ref: "#/components/schemas/ItemResponse"
+        match:
+          $ref: "#/components/schemas/SearchMatch"
+        path:
+          description: Full path of the location, so same-named items can be told apart.
+          examples:
+            - Garage > Toolbox
+          type: string
+      required:
+        - item
+        - path
+        - match
+      type: object
 info:
   description: "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves. All operations require a bearer token except this document, the docs UI and the schemas."
   title: homey API
@@ -877,16 +916,16 @@ paths:
         - Rooms
   /search:
     get:
-      description: Matches the query against item names, descriptions, aliases and tags, case-insensitively, and returns the matches ordered by name.
+      description: "Matches every term of the query against item names, descriptions, aliases and tags. Candidates come back best match first: an exact match before a prefix, a prefix before a partial one, and a name before an alias, a tag and a description."
       operationId: search
       parameters:
-        - description: Free-text query.
+        - description: Free-text query; every term must match.
           explode: false
           in: query
           name: q
           required: true
           schema:
-            description: Free-text query.
+            description: Free-text query; every term must match.
             examples:
               - trapano
             maxLength: 200
@@ -898,7 +937,7 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: "#/components/schemas/ItemResponse"
+                  $ref: "#/components/schemas/SearchResult"
                 type:
                   - array
                   - "null"
