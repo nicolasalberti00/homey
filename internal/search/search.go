@@ -107,7 +107,7 @@ func (e Engine) Search(ctx context.Context, query string) ([]Result, error) {
 func Classify(item inventory.Item, terms []string) (Match, bool) {
 	best, found := Match{}, false
 	for _, term := range terms {
-		term = strings.ToLower(term)
+		term = inventory.FoldText(term)
 		for _, field := range fieldOrder {
 			for _, value := range fieldValues(item, field) {
 				kind, ok := classify(value, term)
@@ -174,9 +174,10 @@ func fieldValues(item inventory.Item, field Field) []string {
 	return nil
 }
 
-// classify compares one field value with one term.
+// classify compares one field value with one term. Both sides are folded, so
+// an accent or a capital letter never decides how closely a field matched.
 func classify(value, term string) (Kind, bool) {
-	lower := strings.ToLower(value)
+	lower := inventory.FoldText(value)
 	switch {
 	case lower == term:
 		return KindExact, true

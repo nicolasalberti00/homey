@@ -95,6 +95,29 @@ func TestClassifyTakesTheBestTerm(t *testing.T) {
 	}
 }
 
+func TestClassifyIgnoresAccents(t *testing.T) {
+	item := inventory.Item{Name: "Caffè", Tags: []string{"caffetteria"}}
+
+	cases := []struct {
+		term string
+		want Match
+	}{
+		// The accent and its direction do not decide the kind: what a user
+		// types as "caffe" is an exact match of "Caffè".
+		{"caffe", Match{FieldName, KindExact}},
+		{"caffé", Match{FieldName, KindExact}},
+		{"CAFFÈ", Match{FieldName, KindExact}},
+		{"caffett", Match{FieldTag, KindPrefix}},
+		{"affetteria", Match{FieldTag, KindPartial}},
+	}
+	for _, tc := range cases {
+		got, ok := Classify(item, []string{tc.term})
+		if !ok || got != tc.want {
+			t.Fatalf("Classify(%q) = %+v/%t, want %+v", tc.term, got, ok, tc.want)
+		}
+	}
+}
+
 func TestLocationsPath(t *testing.T) {
 	toolbox := inventory.ContainerID(10)
 	index := locations{

@@ -131,10 +131,10 @@ ORDER BY ia.item_id, ia.alias COLLATE NOCASE, ia.alias`
 	searchMatchSQL = `NOT EXISTS (
 	SELECT 1 FROM json_each(?) AS term
 	WHERE NOT (
-		name LIKE '%' || term.value || '%' ESCAPE '\'
-		OR description LIKE '%' || term.value || '%' ESCAPE '\'
-		OR EXISTS (SELECT 1 FROM item_aliases a WHERE a.item_id = items.id AND a.alias LIKE '%' || term.value || '%' ESCAPE '\')
-		OR EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND t.tag LIKE '%' || term.value || '%' ESCAPE '\')
+		homey_fold(name) LIKE '%' || term.value || '%' ESCAPE '\'
+		OR homey_fold(description) LIKE '%' || term.value || '%' ESCAPE '\'
+		OR EXISTS (SELECT 1 FROM item_aliases a WHERE a.item_id = items.id AND homey_fold(a.alias) LIKE '%' || term.value || '%' ESCAPE '\')
+		OR EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND homey_fold(t.tag) LIKE '%' || term.value || '%' ESCAPE '\')
 	)
 )`
 

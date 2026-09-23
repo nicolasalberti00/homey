@@ -194,6 +194,29 @@ func TestSearchTiesKeepNameOrder(t *testing.T) {
 	}
 }
 
+func TestSearchIgnoresAccents(t *testing.T) {
+	api, bearer := newTestAPI(t)
+
+	room := createRoomViaAPI(t, api, bearer.Write, "Cucina")
+	location := LocationRef{Kind: "room", ID: room.ID}
+	coffee := postItem(t, api, bearer.Write, ItemInput{
+		Name: "Caffè", Tags: []string{"bevande"}, Quantity: 1, Location: location,
+	})
+	postItem(t, api, bearer.Write, ItemInput{Name: "Tazze", Quantity: 1, Location: location})
+
+	// The whole stack folds, not just the query: "caffe" is an exact match of
+	// "Caffè", so the candidate comes back first with the match that says so.
+	for _, query := range []string{"caffe", "caffé", "caffè", "CAFFÈ"} {
+		results := runSearch(t, api, bearer.Read, query)
+		if len(results) != 1 || results[0].Item.ID != coffee.ID {
+			t.Fatalf("Search(%q) = %+v, want the coffee", query, results)
+		}
+		if results[0].Match != (SearchMatch{Field: "name", Kind: "exact"}) {
+			t.Fatalf("Search(%q) match = %+v, want an exact name match", query, results[0].Match)
+		}
+	}
+}
+
 func TestSearchTreatsWildcardsLiterally(t *testing.T) {
 	api, bearer := newTestAPI(t)
 
