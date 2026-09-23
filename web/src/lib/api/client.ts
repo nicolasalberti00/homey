@@ -24,6 +24,8 @@ export type Room = components['schemas']['RoomResponse'];
 export type Container = components['schemas']['ContainerResponse'];
 export type ContainerDetail = components['schemas']['ContainerDetail'];
 export type Item = components['schemas']['ItemResponse'];
+export type SearchMatch = components['schemas']['SearchMatch'];
+export type SearchResult = components['schemas']['SearchResult'];
 export type LocationRef = components['schemas']['LocationRef'];
 
 /** ApiError carries the RFC 9457 problem document of a failed request. */
@@ -49,6 +51,8 @@ type FetchOptions = {
 	body?: unknown;
 	/** Overrides the stored settings; used by "test connection" flows. */
 	settings?: Settings;
+	/** Aborts an in-flight request, so a newer one can replace it. */
+	signal?: AbortSignal;
 };
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
@@ -60,6 +64,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
 	const response = await fetch(`${settings.apiUrl}${path}`, {
 		method: options.method ?? 'GET',
 		headers,
+		signal: options.signal,
 		body: options.body === undefined ? undefined : JSON.stringify(options.body)
 	});
 	if (!response.ok) {
