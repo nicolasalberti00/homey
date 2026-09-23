@@ -63,7 +63,8 @@ contract in [`api/openapi.yaml`](api/openapi.yaml):
   `POST /api/v1/containers/{id}/move`
 - Items — `GET/POST /api/v1/items` (filters `room_id`, `container_id`),
   `GET/PATCH/DELETE /api/v1/items/{id}`, `POST /api/v1/items/{id}/move`
-- Search — `GET /api/v1/search`, answers `501` until Phase 5
+- Search — `GET /api/v1/search?q=…` matches item names and descriptions,
+  case-insensitively, ordered by name
 - Public — `GET /api/v1/openapi.json` and `GET /api/v1/docs` (Stoplight docs UI)
 
 Every response carries defensive security headers (`nosniff`, frame deny,
