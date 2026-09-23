@@ -22,8 +22,17 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: vet
         run: go vet ./...
-      - name: tests
-        run: go test ./...
+      - name: tests with coverage
+        # -coverpkg makes the profile cross-package: a package counts the
+        # coverage its tests get from the tests of other packages too. The
+        # "coverage: …% of statements in ./internal/…" lines below are per
+        # test binary; the merged, readable numbers come from the next step.
+        run: go test -coverpkg=./internal/... -coverprofile=coverage.out ./...
+      - name: coverage threshold
+        # Prints the coverage of every package and fails below the minimum
+        # (75%, defined in cmd/coverage). This runs inside the required
+        # "vet + tests" check, so a drop blocks the merge.
+        run: go run ./cmd/coverage -profile coverage.out
       - name: openapi artifact up to date
         run: go run ./cmd/openapi > api/openapi.yaml && git diff --exit-code api/openapi.yaml
 

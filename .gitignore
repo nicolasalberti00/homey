@@ -2,6 +2,9 @@
 /homey
 /dist/
 
+# coverage profile (go test -coverprofile, see cmd/coverage)
+/coverage.out
+
 # local data (SQLite database)
 /data/
 *.db
