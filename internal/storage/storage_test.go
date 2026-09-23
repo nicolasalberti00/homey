@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -23,6 +24,45 @@ func openDB(t testing.TB, dbPath string) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
+}
+
+func TestSearchSQLUsesTheFoldFunction(t *testing.T) {
+	// The statements name the SQL function and the driver registers it: the
+	// two have to agree, and nothing else would catch a typo in either.
+	statements := map[string]string{
+		"items":   searchItemsSQL,
+		"tags":    searchItemTagsSQL,
+		"aliases": searchItemAliasesSQL,
+	}
+	for name, statement := range statements {
+		if !strings.Contains(statement, FoldFunction+"(") {
+			t.Errorf("search %s statement does not use %s:\n%s", name, FoldFunction, statement)
+		}
+	}
+}
+
+func TestFoldFunctionFoldsText(t *testing.T) {
+	db := openDB(t, mustMigrate(t))
+
+	// The name is spelled out here on purpose: the guard test forbids building
+	// statements, and TestSearchSQLUsesTheFoldFunction keeps the SQL and the
+	// registration in step.
+	var folded string
+	if err := db.QueryRow(`SELECT homey_fold(?)`, "Caffè").Scan(&folded); err != nil {
+		t.Fatalf("folding in SQL: %v", err)
+	}
+	if folded != "caffe" {
+		t.Fatalf("folded = %q, want caffe", folded)
+	}
+
+	// A NULL argument folds to NULL, like every other SQL function.
+	var null sql.NullString
+	if err := db.QueryRow(`SELECT homey_fold(NULL)`).Scan(&null); err != nil {
+		t.Fatalf("folding NULL: %v", err)
+	}
+	if null.Valid {
+		t.Fatalf("folding NULL = %q, want NULL", null.String)
+	}
 }
 
 func TestMigrateUpCreatesSchema(t *testing.T) {

@@ -85,10 +85,10 @@ and the MCP server: all three present the same candidates.
 
 **Matching.** The query is split on whitespace and **every term must match**, in
 any order. A term matches when it appears anywhere in the item's name,
-description, aliases or tags — case-insensitively and as a plain substring, so
-`rapa` finds `Trapano`. Notes are not searched, `%` and `_` are literal
-characters rather than wildcards, and a blank query matches nothing. `q` is
-required and holds 1–200 characters.
+description, aliases or tags — as a plain substring of *folded* text, so `rapa`
+finds `Trapano` and `caffe`, `caffè` and `CAFFÈ` all find `Caffè`. Notes are not
+searched, `%` and `_` are literal characters rather than wildcards, and a blank
+query matches nothing. `q` is required and holds 1–200 characters.
 
 **Ranking.** Best match first: the field decides (name > alias > tag >
 description), then how closely it matched (exact > prefix > partial). A partial
@@ -100,11 +100,10 @@ the listing order (by name).
 `match.kind`) — which is what makes an ambiguous query answerable without a
 second lookup.
 
-**Known limits.** Matching folds ASCII case only: an accented letter has to be
-typed as it is stored (`caffè`, not `CAFFÈ`), and no Unicode normalization is
-applied, so a letter written as one code point and as a base letter plus a
-combining accent are different strings. The query is a scan of the inventory;
-`TestSearchPerformanceOnLargeInventory` measures it on 10,000 items.
+**Known limits.** Folding is not transliteration: case and diacritics go, but a
+letter without a decomposition keeps its identity, so `søren` does not match
+`soren` and `Straße` does not match `strasse`. The query is a scan of the
+inventory; `TestSearchPerformanceOnLargeInventory` measures it on 10,000 items.
 
 ## API tokens
 

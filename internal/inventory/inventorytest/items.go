@@ -816,7 +816,7 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
-	t.Run("SearchMatchesAccents", func(t *testing.T) {
+	t.Run("SearchIgnoresAccents", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
 
@@ -830,17 +830,25 @@ func testItems(t *testing.T, newRepos NewRepos) {
 			Location: location,
 		}
 		requiresNoError(t, repos.Items.Create(ctx, &coffee), "creating the coffee maker")
-		createItem(t, repos, "Tazze", location)
+		souvenir := inventory.Item{Name: "Perù", Quantity: 1, Location: location}
+		requiresNoError(t, repos.Items.Create(ctx, &souvenir), "creating the souvenir")
 
-		// An accented term matches the accented text it was typed from, and
-		// the ASCII letters around it keep ignoring case. Folding non-ASCII
-		// letters is the adapter's business: SQLite's LIKE folds ASCII only,
-		// so "CAFFÈ" would not match "caffè" (see the README).
-		for _, query := range []string{"caffè", "Caffè", "CAFFETTIERA", "caffetti", "MOKA"} {
+		// The accent, its direction and its case are all folded away: every
+		// spelling of the word finds the item.
+		for _, query := range []string{"caffè", "caffé", "caffe", "CAFFÈ", "Caffé"} {
 			matches, err := repos.Items.Search(ctx, query)
 			requiresNoError(t, err, "Search "+query)
 			if names := itemNames(matches); !slices.Equal(names, []string{"Caffettiera"}) {
 				t.Fatalf("Search(%q) = %v, want [Caffettiera]", query, names)
+			}
+		}
+
+		// The same holds for an accented name and for the labels.
+		for _, query := range []string{"peru", "Perù", "PERÙ", "caffetti", "CAFFETTIERA", "MOKA"} {
+			matches, err := repos.Items.Search(ctx, query)
+			requiresNoError(t, err, "Search "+query)
+			if len(matches) != 1 {
+				t.Fatalf("Search(%q) = %v, want one match", query, itemNames(matches))
 			}
 		}
 

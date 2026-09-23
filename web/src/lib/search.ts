@@ -7,6 +7,16 @@
 /** A piece of text, flagged when it is part of a query match. */
 export type Segment = { text: string; match: boolean };
 
+/**
+ * Folds text the way the server does: lower case, without diacritics, so a
+ * query typed as "caffe" highlights "Caffè". Folding keeps one code point per
+ * original one for the Latin letters this app stores, which is what lets the
+ * segments below be sliced out of the original text.
+ */
+export function foldText(text: string): string {
+	return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
 /** "  Drill  bits " → ["drill", "bits"]: every term must match. */
 export function queryTerms(query: string): string[] {
 	return query
@@ -18,14 +28,18 @@ export function queryTerms(query: string): string[] {
 
 /**
  * Splits `text` into plain and matched segments, so the UI can mark matches
- * without `{@html}`. Overlapping terms keep the longest match.
+ * without `{@html}`. The comparison happens on folded text — the same form the
+ * server matched — while the segments keep the original spelling. Folding here
+ * rather than in the terms keeps the highlight right whether the matching ran
+ * on the server or, as it did before the search endpoint, in the browser.
+ * Overlapping terms keep the longest match.
  */
 export function highlightSegments(text: string, terms: string[]): Segment[] {
-	const needles = terms.filter((term) => term.length > 0);
+	const needles = terms.map(foldText).filter((term) => term.length > 0);
 	if (text.length === 0 || needles.length === 0) {
 		return [{ text, match: false }];
 	}
-	const lower = text.toLowerCase();
+	const lower = foldText(text);
 	const segments: Segment[] = [];
 	let cursor = 0;
 	while (cursor < text.length) {

@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
+	golang.org/x/text v0.40.0
 	golang.org/x/tools v0.48.0
 	modernc.org/sqlite v1.59.0
 )
