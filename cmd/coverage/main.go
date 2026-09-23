@@ -19,7 +19,7 @@
 //
 // Usage:
 //
-//	go test -coverpkg=./internal/... -coverprofile=coverage.out ./...
+//	go test -coverpkg=./internal/...,./mcp/... -coverprofile=coverage.out ./...
 //	go run ./cmd/coverage -profile coverage.out
 package main
 

@@ -68,6 +68,8 @@ func newHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB, ui fs.FS) h
 		Logger: logger,
 	})
 
+	mountMCP(mux, tokens, logger, cfg.MCPEnabled)
+
 	// Everything else is the embedded single-page app. The pattern
 	// is method-scoped so unknown methods keep the mux's 405 behaviour.
 	mux.Handle("GET /", newSPAHandler(ui))
@@ -96,6 +98,18 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(status int) {
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+// Unwrap exposes the wrapped writer to http.ResponseController, and Flush
+// forwards to it. The MCP transport streams server-sent events: a wrapper that
+// swallows the flush would leave the client waiting for headers stuck in a
+// buffer, and the connection would never come up.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+func (r *statusRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // requestLogger logs one line per request with method, path, status and
