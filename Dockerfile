@@ -1,5 +1,18 @@
 # syntax=docker/dockerfile:1
 
+# ---- web stage -------------------------------------------------------------
+# The SPA is built first: the Go build embeds its output into the binary, so
+# the runtime image stays a single binary with no static files.
+FROM node:24-alpine AS web
+
+WORKDIR /src/web
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web/ ./
+RUN npm run build
+
 # ---- build stage -----------------------------------------------------------
 FROM golang:1.27-alpine AS build
 
@@ -10,6 +23,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+# The embed tree is filled here; the context never carries a stale local copy.
+COPY --from=web /src/web/build/ ./internal/webui/dist/
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build \

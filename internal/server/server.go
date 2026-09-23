@@ -6,12 +6,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/nicolasalberti00/homey/internal/config"
 	"github.com/nicolasalberti00/homey/internal/storage"
+	"github.com/nicolasalberti00/homey/internal/webui"
 )
 
 const (
@@ -32,10 +34,16 @@ func New(cfg *config.Config, logger *slog.Logger, db *sql.DB) *http.Server {
 }
 
 // NewHandler builds the root HTTP handler: security headers, CORS, rate
-// limits and failed-auth blocking wrap the mux that carries health checks
-// and the Huma API. Kept separate from New so tests can exercise it with
-// httptest.
+// limits and failed-auth blocking wrap the mux that carries health checks,
+// the Huma API and the embedded UI. Kept separate from New so tests can
+// exercise it with httptest.
 func NewHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB) http.Handler {
+	return newHandler(cfg, logger, db, webui.Assets())
+}
+
+// newHandler is NewHandler with the UI files injected: production passes the
+// embedded build, tests pass a fixture and stay independent of it.
+func newHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB, ui fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	tokens := storage.NewTokenStore(db)
 
@@ -59,6 +67,10 @@ func NewHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB) http.Handle
 		Tokens: tokens,
 		Logger: logger,
 	})
+
+	// Everything else is the embedded single-page app. The pattern
+	// is method-scoped so unknown methods keep the mux's 405 behaviour.
+	mux.Handle("GET /", newSPAHandler(ui))
 
 	var handler http.Handler = mux
 	handler = authFailureLimit(cfg.RateLimitAuthFailures, handler)
