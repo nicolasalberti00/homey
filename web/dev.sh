@@ -11,6 +11,8 @@
 #   HOMEY_TEST_LISTEN    API listen address   (default: 127.0.0.1:8080)
 #   HOMEY_TEST_WEB_PORT  Vite port            (default: 5173)
 #   HOMEY_TEST_RESET=1   delete the database before starting (fresh state)
+#   HOMEY_RATE_LIMIT_WRITES         API write limit/min       (default: 0, off)
+#   HOMEY_RATE_LIMIT_AUTH_FAILURES  failed-auth limit/min     (default: 0, off)
 
 set -euo pipefail
 
@@ -20,6 +22,14 @@ DB_PATH="${HOMEY_TEST_DB:-$HOME/homey-dev.db}"
 API_ADDR="${HOMEY_TEST_LISTEN:-127.0.0.1:8080}"
 API_PORT="${API_ADDR##*:}"
 WEB_PORT="${HOMEY_TEST_WEB_PORT:-5173}"
+
+# Rate limits are off by default in development: seeding through the UI trips
+# the production write limit (60/min), and a stale token in the browser trips
+# the failed-auth limiter (10/min), which blocks the whole IP for a minute —
+# curl and CLI from the same machine included. Export the variables to
+# exercise the limits themselves.
+export HOMEY_RATE_LIMIT_WRITES="${HOMEY_RATE_LIMIT_WRITES:-0}"
+export HOMEY_RATE_LIMIT_AUTH_FAILURES="${HOMEY_RATE_LIMIT_AUTH_FAILURES:-0}"
 
 if [[ "${HOMEY_TEST_RESET:-0}" == "1" ]]; then
 	echo "Resetting the test database: $DB_PATH"
@@ -144,6 +154,11 @@ echo "────────────────────────�
 echo " UI:    http://localhost:$WEB_PORT"
 echo " Token: $TOKEN"
 echo " Saved: $TOKEN_FILE (mode 600)"
+if [[ "$HOMEY_RATE_LIMIT_WRITES" == "0" && "$HOMEY_RATE_LIMIT_AUTH_FAILURES" == "0" ]]; then
+	echo " Limits: off (HOMEY_RATE_LIMIT_WRITES / HOMEY_RATE_LIMIT_AUTH_FAILURES to enable)"
+else
+	echo " Limits: writes ${HOMEY_RATE_LIMIT_WRITES}/min, auth failures ${HOMEY_RATE_LIMIT_AUTH_FAILURES}/min"
+fi
 echo
 echo " Paste the token in Settings → API token, then Test connection."
 echo " Restarting mints a new token; the previous one keeps working, so the"

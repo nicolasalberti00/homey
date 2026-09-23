@@ -2,6 +2,16 @@
 	import type { Problem } from '$lib/api/client';
 
 	let { problem, title = 'Something went wrong' }: { problem: Problem; title?: string } = $props();
+
+	// 429s carry the seconds to wait in Retry-After; say when to retry instead
+	// of leaving the user to guess.
+	const retryHint = $derived(
+		problem.status !== 429
+			? ''
+			: problem.retryAfter
+				? `Too many requests — try again in ${problem.retryAfter} second${problem.retryAfter === 1 ? '' : 's'}.`
+				: 'Too many requests — try again shortly.'
+	);
 </script>
 
 <!-- role=alert: screen readers announce the failure when it appears. -->
@@ -11,6 +21,9 @@
 		<p>{problem.detail}</p>
 	{:else if problem.title}
 		<p>{problem.title}</p>
+	{/if}
+	{#if retryHint}
+		<p>{retryHint}</p>
 	{/if}
 	{#if problem.errors?.length}
 		<ul>

@@ -19,12 +19,21 @@ also written to `<db>.token` (mode 600) so it can be recovered after the
 terminal scrolls. Test data lives in `~/homey-dev.db` (delete it for a
 clean slate, or set `HOMEY_TEST_RESET=1`).
 
-| Variable              | Default          | Purpose                        |
-| --------------------- | ---------------- | ------------------------------ |
-| `HOMEY_TEST_DB`       | `~/homey-dev.db` | database file                  |
-| `HOMEY_TEST_LISTEN`   | `127.0.0.1:8080` | API listen address             |
-| `HOMEY_TEST_WEB_PORT` | `5173`           | Vite dev server port           |
-| `HOMEY_TEST_RESET`    | `0`              | `1` deletes the database first |
+The API runs with rate limits **off** in development: seeding through the
+UI trips the production write limit (60/min), and a stale token in the
+browser trips the failed-auth limiter (10/min), which blocks the whole IP
+for a minute — `curl` and CLI from the same machine included. Set the two
+`HOMEY_RATE_LIMIT_*` variables to a positive value to exercise the limits;
+the UI then shows the `Retry-After` seconds when a request is limited.
+
+| Variable                         | Default          | Purpose                                  |
+| -------------------------------- | ---------------- | ---------------------------------------- |
+| `HOMEY_TEST_DB`                  | `~/homey-dev.db` | database file                            |
+| `HOMEY_TEST_LISTEN`              | `127.0.0.1:8080` | API listen address                       |
+| `HOMEY_TEST_WEB_PORT`            | `5173`           | Vite dev server port                     |
+| `HOMEY_TEST_RESET`               | `0`              | `1` deletes the database first           |
+| `HOMEY_RATE_LIMIT_WRITES`        | `0` (off)        | API writes per IP per minute             |
+| `HOMEY_RATE_LIMIT_AUTH_FAILURES` | `0` (off)        | failed authentications per IP per minute |
 
 ## Development (manual)
 
