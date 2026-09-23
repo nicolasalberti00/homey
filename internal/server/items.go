@@ -105,6 +105,9 @@ func RegisterItems(api huma.API, deps Deps) {
 		if input.Body.Tags != nil {
 			item.Tags = *input.Body.Tags
 		}
+		if input.Body.Aliases != nil {
+			item.Aliases = *input.Body.Aliases
+		}
 		if err := deps.Repos.Items.Update(ctx, &item); err != nil {
 			return nil, mapError(deps, err)
 		}
@@ -167,6 +170,7 @@ type ItemInput struct {
 	Quantity    int         `json:"quantity" minimum:"0" maximum:"1000000" doc:"How many of the item exist; zero means none left."`
 	Notes       string      `json:"notes,omitempty" maxLength:"4000" doc:"Optional free-form notes."`
 	Tags        []string    `json:"tags,omitempty" maxItems:"20" doc:"Free-form labels, unique within the item."`
+	Aliases     []string    `json:"aliases,omitempty" maxItems:"20" doc:"Other names the item answers to, searched like its name."`
 	Location    LocationRef `json:"location" doc:"Where the item lives."`
 }
 
@@ -177,6 +181,7 @@ func newItem(input ItemInput) inventory.Item {
 		Quantity:    input.Quantity,
 		Notes:       input.Notes,
 		Tags:        input.Tags,
+		Aliases:     input.Aliases,
 		Location:    toLocation(input.Location),
 	}
 }
@@ -190,6 +195,7 @@ type ItemPatch struct {
 	Quantity    *int      `json:"quantity,omitempty" minimum:"0" maximum:"1000000" doc:"New quantity."`
 	Notes       *string   `json:"notes,omitempty" maxLength:"4000" doc:"New notes."`
 	Tags        *[]string `json:"tags,omitempty" maxItems:"20" doc:"New tag set, replacing the existing one."`
+	Aliases     *[]string `json:"aliases,omitempty" maxItems:"20" doc:"New alias set, replacing the existing one."`
 }
 
 // ItemResponse is the API representation of an item.
@@ -200,6 +206,7 @@ type ItemResponse struct {
 	Quantity    int         `json:"quantity" example:"1"`
 	Notes       string      `json:"notes"`
 	Tags        []string    `json:"tags"`
+	Aliases     []string    `json:"aliases"`
 	Location    LocationRef `json:"location" doc:"Where the item lives."`
 	CreatedAt   time.Time   `json:"created_at" format:"date-time"`
 	UpdatedAt   time.Time   `json:"updated_at" format:"date-time"`
@@ -210,6 +217,10 @@ func newItemResponse(item inventory.Item) ItemResponse {
 	if tags == nil {
 		tags = []string{}
 	}
+	aliases := item.Aliases
+	if aliases == nil {
+		aliases = []string{}
+	}
 	return ItemResponse{
 		ID:          int64(item.ID),
 		Name:        item.Name,
@@ -217,6 +228,7 @@ func newItemResponse(item inventory.Item) ItemResponse {
 		Quantity:    item.Quantity,
 		Notes:       item.Notes,
 		Tags:        tags,
+		Aliases:     aliases,
 		Location:    fromLocation(item.Location),
 		CreatedAt:   item.CreatedAt,
 		UpdatedAt:   item.UpdatedAt,

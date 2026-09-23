@@ -1,8 +1,8 @@
 package server
 
-// The search operation: it answers with the items whose name or description
-// contains the query. Aliases, tags and ranking are not part of the query
-// yet, so the response stays a plain list of items.
+// The search operation: it answers with the items whose name, description,
+// aliases or tags contain the query. Ranking is not part of the query yet, so
+// the response stays a plain list of items.
 
 import (
 	"context"
@@ -18,7 +18,7 @@ func RegisterSearch(api huma.API, deps Deps) {
 		Method:      http.MethodGet,
 		Path:        "/search",
 		Summary:     "Search the inventory",
-		Description: "Matches the query against item names and descriptions, case-insensitively, and returns the matches ordered by name.",
+		Description: "Matches the query against item names, descriptions, aliases and tags, case-insensitively, and returns the matches ordered by name.",
 		Tags:        []string{"Search"},
 	}, func(ctx context.Context, input *SearchInput) (*SearchOutput, error) {
 		items, err := deps.Repos.Items.Search(ctx, input.Query)

@@ -18,7 +18,9 @@ export function queryTerms(query: string): string[] {
 
 /** The fields a query looks at, joined into one lowercase haystack. */
 function haystack(item: Item): string {
-	return [item.name, item.description ?? '', ...(item.tags ?? [])].join('\n').toLowerCase();
+	return [item.name, item.description ?? '', ...(item.tags ?? []), ...(item.aliases ?? [])]
+		.join('\n')
+		.toLowerCase();
 }
 
 /** True when every term appears somewhere in the item's searchable fields. */

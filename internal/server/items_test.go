@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -225,4 +227,58 @@ func createItemViaAPI(t *testing.T, api humatest.TestAPI, bearer string, locatio
 		t.Fatalf("decoding item: %v", err)
 	}
 	return item
+}
+
+func TestItemAliases(t *testing.T) {
+	api, bearer := newTestAPI(t)
+	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
+
+	rec := api.Post("/items", bearer.Write, ItemInput{
+		Name:     "Cacciavite",
+		Quantity: 1,
+		Aliases:  []string{"  Giravite  ", "cacciavite a stella"},
+		Location: LocationRef{Kind: "room", ID: room.ID},
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", rec.Code, rec.Body.String())
+	}
+	var created ItemResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	// Trimmed and ordered case-insensitively, like tags.
+	if want := []string{"cacciavite a stella", "Giravite"}; !slices.Equal(created.Aliases, want) {
+		t.Fatalf("aliases = %v, want %v", created.Aliases, want)
+	}
+
+	// A patch replaces the whole set.
+	rec = api.Patch(itemPathID(created.ID), bearer.Write, ItemPatch{Aliases: &[]string{"Giravite"}})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	var updated ItemResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if want := []string{"Giravite"}; !slices.Equal(updated.Aliases, want) {
+		t.Fatalf("aliases after patch = %v, want %v", updated.Aliases, want)
+	}
+
+	// The rules are reported as field problems, like the other item fields.
+	tooMany := make([]string, 21)
+	for index := range tooMany {
+		tooMany[index] = fmt.Sprintf("alias-%d", index)
+	}
+	rec = api.Post("/items", bearer.Write, ItemInput{
+		Name:     "Saw",
+		Quantity: 1,
+		Aliases:  tooMany,
+		Location: LocationRef{Kind: "room", ID: room.ID},
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body: %s", rec.Code, rec.Body.String())
+	}
+	if _, _, _, locations := decodeProblem(t, rec); !slices.Contains(locations, "body.aliases") {
+		t.Fatalf("locations = %v, want body.aliases", locations)
+	}
 }

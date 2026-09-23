@@ -102,7 +102,7 @@
 				aria-describedby="search-hint"
 			/>
 			<p id="search-hint" class="muted">
-				Every term must match the name, description or tags. Server-side ranking arrives in Phase 5.
+				Every term must match the name, description, aliases or tags.
 			</p>
 		</div>
 
@@ -167,6 +167,13 @@
 								<ul class="tags" aria-label="Tags">
 									{#each item.tags as tag (tag)}
 										<li><Highlight text={tag} {terms} /></li>
+									{/each}
+								</ul>
+							{/if}
+							{#if item.aliases?.length}
+								<ul class="tags aliases" aria-label="Aliases">
+									{#each item.aliases as alias (alias)}
+										<li><Highlight text={alias} {terms} /></li>
 									{/each}
 								</ul>
 							{/if}
@@ -279,5 +286,11 @@
 		border-radius: 999px;
 		font-size: 0.8rem;
 		padding: 0.1rem 0.55rem;
+	}
+
+	/* Aliases are chips too, but dashed: they are the other names of the item. */
+	.tags.aliases li {
+		background: none;
+		border: 1px dashed var(--border);
 	}
 </style>

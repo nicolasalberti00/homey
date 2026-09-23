@@ -62,6 +62,9 @@ func (p ContainerPath) String() string {
 // Tags are free-form labels such as "strumenti" or "bagno". They are unique
 // within the item (case-insensitively) and listings order them
 // case-insensitively.
+//
+// Aliases are the other names an item answers to, such as "giravite" for a
+// "cacciavite": search matches them like the name itself.
 type Item struct {
 	ID          ItemID
 	Name        string
@@ -69,6 +72,7 @@ type Item struct {
 	Quantity    int
 	Notes       string
 	Tags        []string
+	Aliases     []string
 	Location    Location
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
