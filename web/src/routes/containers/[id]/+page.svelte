@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import AddButton from '$lib/components/AddButton.svelte';
 	import { page } from '$app/state';
 	import {
 		apiFetch,
@@ -84,6 +85,11 @@
 	let destination = $state('');
 	let moving = $state(false);
 	let moved = $state(false);
+	let showMove = $state(false);
+
+	// Creating children and items: the forms stay collapsed until asked for.
+	let showCreateChild = $state(false);
+	let showCreateItem = $state(false);
 
 	// The edit form is seeded in the event handler, not in an effect.
 	function startEdit() {
@@ -131,6 +137,7 @@
 			});
 			childName = '';
 			childDescription = '';
+			showCreateChild = false;
 			await refreshInventory();
 		} catch (error) {
 			problem = toProblem(error, 'Could not create the container');
@@ -148,6 +155,7 @@
 				method: 'POST',
 				body: { ...draft, location: { kind: 'container', id: container.id } }
 			});
+			showCreateItem = false;
 			await refreshInventory();
 		} catch (error) {
 			problem = toProblem(error, 'Could not create the item');
@@ -175,6 +183,7 @@
 			await refreshInventory();
 			destination = '';
 			moved = true;
+			showMove = false;
 		} catch (error) {
 			problem = toProblem(error, 'Could not move the container');
 		} finally {
@@ -272,8 +281,42 @@
 			<p class="muted path">Location: {index.containerPath(container.id)}</p>
 			<div class="actions">
 				<button class="btn" type="button" onclick={startEdit}>Edit</button>
+				<button
+					class="btn"
+					type="button"
+					aria-expanded={showMove}
+					aria-controls="move-container"
+					onclick={() => (showMove = !showMove)}
+				>
+					Move
+				</button>
 				{#if saved}<span class="ok" role="status">Saved.</span>{/if}
+				{#if moved}<span class="ok" role="status">Moved.</span>{/if}
 			</div>
+			{#if showMove}
+				<form id="move-container" class="inline-form" onsubmit={move}>
+					<p class="muted">The whole subtree moves with it.</p>
+					<div class="field">
+						<label for="move-destination">New location</label>
+						<select id="move-destination" bind:value={destination} required>
+							<option value="" disabled>Choose a destination…</option>
+							{#each destinationGroups as group (group.label)}
+								<optgroup label={group.label}>
+									{#each group.options as option (option.value)}
+										<option value={option.value}>{option.label}</option>
+									{/each}
+								</optgroup>
+							{/each}
+						</select>
+					</div>
+					<div class="actions">
+						<button class="btn" type="submit" disabled={moving || destination === ''}>
+							{moving ? 'Moving…' : 'Move'}
+						</button>
+						<button class="btn" type="button" onclick={() => (showMove = false)}>Cancel</button>
+					</div>
+				</form>
+			{/if}
 		{/if}
 	</section>
 
@@ -283,36 +326,51 @@
 		</div>
 	{/if}
 
-	<section class="card" aria-labelledby="move-heading">
-		<h2 id="move-heading">Move this container</h2>
-		<p class="muted">The whole subtree moves with it.</p>
-		<form onsubmit={move}>
-			<div class="field">
-				<label for="move-destination">New location</label>
-				<select id="move-destination" bind:value={destination} required>
-					<option value="" disabled>Choose a destination…</option>
-					{#each destinationGroups as group (group.label)}
-						<optgroup label={group.label}>
-							{#each group.options as option (option.value)}
-								<option value={option.value}>{option.label}</option>
-							{/each}
-						</optgroup>
-					{/each}
-				</select>
-			</div>
-			<div class="actions">
-				<button class="btn" type="submit" disabled={moving || destination === ''}>
-					{moving ? 'Moving…' : 'Move'}
-				</button>
-				{#if moved}<span class="ok" role="status">Moved.</span>{/if}
-			</div>
-		</form>
-	</section>
-
 	<section aria-labelledby="children-heading">
-		<h2 id="children-heading">Containers inside</h2>
+		<div class="section-head">
+			<h2 id="children-heading">Containers inside</h2>
+			<AddButton
+				label="New container"
+				expanded={showCreateChild}
+				controls="create-child"
+				onToggle={() => (showCreateChild = !showCreateChild)}
+			/>
+		</div>
+		{#if showCreateChild}
+			<form id="create-child" class="card create" onsubmit={createChild}>
+				<h3>New container</h3>
+				<div class="field">
+					<label for="child-name">Name</label>
+					<input
+						id="child-name"
+						bind:value={childName}
+						required
+						maxlength="120"
+						autocomplete="off"
+					/>
+				</div>
+				<div class="field">
+					<label for="child-description">
+						Description <span class="muted">(optional)</span>
+					</label>
+					<input
+						id="child-description"
+						bind:value={childDescription}
+						maxlength="2000"
+						autocomplete="off"
+					/>
+				</div>
+				<div class="actions">
+					<button class="btn primary" type="submit" disabled={creating}>
+						{creating ? 'Creating…' : 'Create container'}
+					</button>
+					<button class="btn" type="button" onclick={() => (showCreateChild = false)}>Cancel</button
+					>
+				</div>
+			</form>
+		{/if}
 		{#if children.length === 0}
-			<EmptyState title="No containers inside" hint="Create one with the form below." />
+			<EmptyState title="No containers inside" hint="Add the first one with + next to the title." />
 		{:else}
 			<ul class="list">
 				{#each children as child (child.id)}
@@ -327,33 +385,30 @@
 				{/each}
 			</ul>
 		{/if}
-		<form class="card create" onsubmit={createChild}>
-			<h3>New container</h3>
-			<div class="field">
-				<label for="child-name">Name</label>
-				<input id="child-name" bind:value={childName} required maxlength="120" autocomplete="off" />
-			</div>
-			<div class="field">
-				<label for="child-description">
-					Description <span class="muted">(optional)</span>
-				</label>
-				<input
-					id="child-description"
-					bind:value={childDescription}
-					maxlength="2000"
-					autocomplete="off"
-				/>
-			</div>
-			<button class="btn primary" type="submit" disabled={creating}>
-				{creating ? 'Creating…' : 'Create container'}
-			</button>
-		</form>
 	</section>
 
 	<section aria-labelledby="items-heading">
-		<h2 id="items-heading">Items inside</h2>
+		<div class="section-head">
+			<h2 id="items-heading">Items inside</h2>
+			<AddButton
+				label="New item"
+				expanded={showCreateItem}
+				controls="create-item"
+				onToggle={() => (showCreateItem = !showCreateItem)}
+			/>
+		</div>
+		{#if showCreateItem}
+			<div id="create-item" class="card create">
+				<h3>New item</h3>
+				<ItemForm
+					saving={creatingItem}
+					onSubmit={createItem}
+					onCancel={() => (showCreateItem = false)}
+				/>
+			</div>
+		{/if}
 		{#if items.length === 0}
-			<EmptyState title="No items here" hint="Create the first item with the form below." />
+			<EmptyState title="No items here" hint="Add the first one with + next to the title." />
 		{:else}
 			<ul class="list">
 				{#each items as item (item.id)}
@@ -376,10 +431,6 @@
 				{/each}
 			</ul>
 		{/if}
-		<div class="card create">
-			<h3>New item</h3>
-			<ItemForm saving={creatingItem} onSubmit={createItem} />
-		</div>
 	</section>
 
 	<section class="card danger-zone" aria-labelledby="danger-heading">
@@ -429,6 +480,13 @@
 
 	.field {
 		margin-bottom: 0.75rem;
+	}
+
+	/* A form that unfolds inside a card, separated from its summary. */
+	.inline-form {
+		margin-top: 1rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
 	}
 
 	.actions {

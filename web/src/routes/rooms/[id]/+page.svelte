@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
+	import AddButton from '$lib/components/AddButton.svelte';
 	import { page } from '$app/state';
 	import {
 		apiFetch,
@@ -43,6 +44,8 @@
 	let containerDescription = $state('');
 	let creatingContainer = $state(false);
 	let creatingItem = $state(false);
+	let showCreateContainer = $state(false);
+	let showCreateItem = $state(false);
 
 	// The edit form is seeded in the event handler, not in an effect.
 	function startEdit() {
@@ -89,6 +92,7 @@
 			});
 			containerName = '';
 			containerDescription = '';
+			showCreateContainer = false;
 			await refreshInventory();
 		} catch (error) {
 			problem = toProblem(error, 'Could not create the container');
@@ -105,6 +109,7 @@
 				method: 'POST',
 				body: { ...draft, location: { kind: 'room', id: roomId } }
 			});
+			showCreateItem = false;
 			await refreshInventory();
 		} catch (error) {
 			problem = toProblem(error, 'Could not create the item');
@@ -176,11 +181,53 @@
 	{/if}
 
 	<section aria-labelledby="containers-heading">
-		<h2 id="containers-heading">Containers</h2>
+		<div class="section-head">
+			<h2 id="containers-heading">Containers</h2>
+			<AddButton
+				label="New container"
+				expanded={showCreateContainer}
+				controls="create-container"
+				onToggle={() => (showCreateContainer = !showCreateContainer)}
+			/>
+		</div>
+		{#if showCreateContainer}
+			<form id="create-container" class="card create" onsubmit={createContainer}>
+				<h3>New container</h3>
+				<div class="field">
+					<label for="container-name">Name</label>
+					<input
+						id="container-name"
+						bind:value={containerName}
+						required
+						maxlength="120"
+						autocomplete="off"
+					/>
+				</div>
+				<div class="field">
+					<label for="container-description">
+						Description <span class="muted">(optional)</span>
+					</label>
+					<input
+						id="container-description"
+						bind:value={containerDescription}
+						maxlength="2000"
+						autocomplete="off"
+					/>
+				</div>
+				<div class="actions">
+					<button class="btn primary" type="submit" disabled={creatingContainer}>
+						{creatingContainer ? 'Creating…' : 'Create container'}
+					</button>
+					<button class="btn" type="button" onclick={() => (showCreateContainer = false)}
+						>Cancel</button
+					>
+				</div>
+			</form>
+		{/if}
 		{#if roomContainers.length === 0}
 			<EmptyState
 				title="No containers in this room"
-				hint="Create the first container with the form below."
+				hint="Add the first one with + next to the title."
 			/>
 		{:else}
 			<ul class="list">
@@ -198,41 +245,32 @@
 				{/each}
 			</ul>
 		{/if}
-		<form class="card create" onsubmit={createContainer}>
-			<h3>New container</h3>
-			<div class="field">
-				<label for="container-name">Name</label>
-				<input
-					id="container-name"
-					bind:value={containerName}
-					required
-					maxlength="120"
-					autocomplete="off"
-				/>
-			</div>
-			<div class="field">
-				<label for="container-description">
-					Description <span class="muted">(optional)</span>
-				</label>
-				<input
-					id="container-description"
-					bind:value={containerDescription}
-					maxlength="2000"
-					autocomplete="off"
-				/>
-			</div>
-			<button class="btn primary" type="submit" disabled={creatingContainer}>
-				{creatingContainer ? 'Creating…' : 'Create container'}
-			</button>
-		</form>
 	</section>
 
 	<section aria-labelledby="items-heading">
-		<h2 id="items-heading">Items in the room</h2>
+		<div class="section-head">
+			<h2 id="items-heading">Items in the room</h2>
+			<AddButton
+				label="New item"
+				expanded={showCreateItem}
+				controls="create-item"
+				onToggle={() => (showCreateItem = !showCreateItem)}
+			/>
+		</div>
+		{#if showCreateItem}
+			<div id="create-item" class="card create">
+				<h3>New item</h3>
+				<ItemForm
+					saving={creatingItem}
+					onSubmit={createItem}
+					onCancel={() => (showCreateItem = false)}
+				/>
+			</div>
+		{/if}
 		{#if directItems.length === 0}
 			<EmptyState
 				title="No items directly in this room"
-				hint="Create the first item with the form below, or add items inside a container."
+				hint="Add the first one with + next to the title, or add items inside a container."
 			/>
 		{:else}
 			<ul class="list">
@@ -256,10 +294,6 @@
 				{/each}
 			</ul>
 		{/if}
-		<div class="card create">
-			<h3>New item</h3>
-			<ItemForm saving={creatingItem} onSubmit={createItem} />
-		</div>
 	</section>
 
 	<section class="card danger-zone" aria-labelledby="danger-heading">
