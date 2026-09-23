@@ -183,6 +183,9 @@
 					{/each}
 				</ul>
 			{/if}
+			{#if item.aliases?.length}
+				<p class="aliases">Also known as: {item.aliases.join(', ')}</p>
+			{/if}
 			{#if item.notes}
 				<p class="notes">Notes: {item.notes}</p>
 			{/if}
@@ -288,7 +291,8 @@
 	}
 
 	.path,
-	.notes {
+	.notes,
+	.aliases {
 		font-size: 0.9rem;
 	}
 

@@ -167,7 +167,7 @@ export interface paths {
         };
         /**
          * Search the inventory
-         * @description Matches the query against item names and descriptions, case-insensitively, and returns the matches ordered by name.
+         * @description Matches the query against item names, descriptions, aliases and tags, case-insensitively, and returns the matches ordered by name.
          */
         get: operations["search"];
         put?: never;
@@ -302,6 +302,8 @@ export interface components {
             type: string;
         };
         ItemInput: {
+            /** @description Other names the item answers to, searched like its name. */
+            aliases?: string[] | null;
             /** @description Optional description of the item. */
             description?: string;
             /** @description Where the item lives. */
@@ -322,6 +324,8 @@ export interface components {
             tags?: string[] | null;
         };
         ItemPatch: {
+            /** @description New alias set, replacing the existing one. */
+            aliases?: string[];
             /** @description New description of the item. */
             description?: string;
             /** @description New name of the item. */
@@ -337,6 +341,7 @@ export interface components {
             tags?: string[];
         };
         ItemResponse: {
+            aliases: string[] | null;
             /** Format: date-time */
             created_at: string;
             description: string;

@@ -27,7 +27,7 @@ func openDB(t *testing.T, dbPath string) *sql.DB {
 
 func TestMigrateUpCreatesSchema(t *testing.T) {
 	db := openDB(t, mustMigrate(t))
-	for _, table := range []string{"rooms", "containers", "items", "item_tags", "api_tokens", "schema_migrations"} {
+	for _, table := range []string{"rooms", "containers", "items", "item_tags", "item_aliases", "api_tokens", "schema_migrations"} {
 		var name string
 		err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
 		if err != nil {
@@ -48,8 +48,8 @@ func TestMigrationVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MigrationVersion: %v", err)
 	}
-	if version != 5 || dirty {
-		t.Fatalf("version = %d dirty = %t, want 5/false", version, dirty)
+	if version != 6 || dirty {
+		t.Fatalf("version = %d dirty = %t, want 6/false", version, dirty)
 	}
 }
 
@@ -175,5 +175,27 @@ func TestItemTagsCascadeOnDelete(t *testing.T) {
 	}
 	if tags != 0 {
 		t.Fatalf("item_tags rows after deleting the item = %d, want 0 (ON DELETE CASCADE)", tags)
+	}
+}
+
+func TestItemAliasesCascadeOnDelete(t *testing.T) {
+	db := openDB(t, mustMigrate(t))
+
+	mustExec(t, db, `INSERT INTO rooms (name) VALUES ('Garage')`)
+	mustExec(t, db, `INSERT INTO items (room_id, name) VALUES (1, 'Cacciavite')`)
+	mustExec(t, db, `INSERT INTO item_aliases (item_id, alias) VALUES (1, 'Giravite')`)
+
+	if _, err := db.Exec(`INSERT INTO item_aliases (item_id, alias) VALUES (1, 'giravite')`); err == nil {
+		t.Fatal("case-insensitive duplicate alias on the same item should be rejected")
+	}
+
+	mustExec(t, db, `DELETE FROM items WHERE id = 1`)
+
+	var aliases int
+	if err := db.QueryRow(`SELECT count(*) FROM item_aliases`).Scan(&aliases); err != nil {
+		t.Fatalf("counting aliases: %v", err)
+	}
+	if aliases != 0 {
+		t.Fatalf("item_aliases rows after deleting the item = %d, want 0 (ON DELETE CASCADE)", aliases)
 	}
 }

@@ -250,6 +250,120 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
+	t.Run("CreatePersistsAliases", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := inventory.Item{
+			Name:     "Cacciavite",
+			Quantity: 1,
+			Location: inventory.RoomLocation(room.ID),
+			Aliases:  []string{"  Giravite  ", "cacciavite a stella"},
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &item), "Create")
+
+		want := []string{"cacciavite a stella", "Giravite"}
+		if !slices.Equal(item.Aliases, want) {
+			t.Fatalf("Create left aliases %v, want %v", item.Aliases, want)
+		}
+		got, err := repos.Items.Get(ctx, item.ID)
+		requiresNoError(t, err, "Get")
+		if !slices.Equal(got.Aliases, want) {
+			t.Fatalf("Get aliases = %v, want %v", got.Aliases, want)
+		}
+	})
+
+	t.Run("CreateWithoutAliasesReturnsEmpty", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		item := createItem(t, repos, "Drill", inventory.RoomLocation(room.ID))
+		if item.Aliases == nil || len(item.Aliases) != 0 {
+			t.Fatalf("created item aliases = %v, want non-nil empty", item.Aliases)
+		}
+	})
+
+	t.Run("CreateRejectsInvalidAliases", func(t *testing.T) {
+		tooMany := make([]string, inventory.MaxAliasesPerItem+1)
+		for index := range tooMany {
+			tooMany[index] = fmt.Sprintf("alias-%d", index)
+		}
+		cases := []struct {
+			name    string
+			aliases []string
+		}{
+			{"empty alias", []string{"giravite", "   "}},
+			{"alias above maximum length", []string{strings.Repeat("a", inventory.MaxNameLen+1)}},
+			{"case-insensitive duplicate", []string{"Giravite", "giravite"}},
+			{"too many aliases", tooMany},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				repos := newRepos(t)
+				room := createRoom(t, repos, "Garage")
+				item := inventory.Item{
+					Name:     "Cacciavite",
+					Quantity: 1,
+					Location: inventory.RoomLocation(room.ID),
+					Aliases:  tc.aliases,
+				}
+				err := repos.Items.Create(t.Context(), &item)
+				requiresError(t, err, inventory.ErrValidation, "Create")
+				requiresValidationProblem(t, err, "aliases")
+			})
+		}
+	})
+
+	t.Run("SameAliasOnDifferentItemsIsAllowed", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+
+		first := inventory.Item{Name: "Cacciavite", Quantity: 1, Location: inventory.RoomLocation(room.ID), Aliases: []string{"Giravite"}}
+		second := inventory.Item{Name: "Cacciavite piatto", Quantity: 1, Location: inventory.RoomLocation(room.ID), Aliases: []string{"giravite"}}
+		requiresNoError(t, repos.Items.Create(t.Context(), &first), "Create first")
+		requiresNoError(t, repos.Items.Create(t.Context(), &second), "Create second")
+	})
+
+	t.Run("UpdateReplacesAliases", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		item := createItem(t, repos, "Cacciavite", inventory.RoomLocation(room.ID))
+
+		item.Aliases = []string{"Giravite", "Cacciavite a stella"}
+		requiresNoError(t, repos.Items.Update(ctx, &item), "Update with aliases")
+		if want := []string{"Cacciavite a stella", "Giravite"}; !slices.Equal(item.Aliases, want) {
+			t.Fatalf("Update left aliases %v, want %v", item.Aliases, want)
+		}
+
+		item.Aliases = []string{"Giravite"}
+		requiresNoError(t, repos.Items.Update(ctx, &item), "Update with one alias")
+		got, err := repos.Items.Get(ctx, item.ID)
+		requiresNoError(t, err, "Get")
+		if want := []string{"Giravite"}; !slices.Equal(got.Aliases, want) {
+			t.Fatalf("Get aliases = %v, want %v", got.Aliases, want)
+		}
+	})
+
+	t.Run("ListIncludesAliases", func(t *testing.T) {
+		repos := newRepos(t)
+		room := createRoom(t, repos, "Garage")
+		item := inventory.Item{
+			Name:     "Cacciavite",
+			Quantity: 1,
+			Location: inventory.RoomLocation(room.ID),
+			Aliases:  []string{"Giravite"},
+		}
+		requiresNoError(t, repos.Items.Create(t.Context(), &item), "Create")
+
+		items, err := repos.Items.List(t.Context())
+		requiresNoError(t, err, "List")
+		if len(items) != 1 || !slices.Equal(items[0].Aliases, []string{"Giravite"}) {
+			t.Fatalf("List = %+v, want one item aliased Giravite", items)
+		}
+	})
+
 	t.Run("MoveToAnotherRoom", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
@@ -591,7 +705,41 @@ func testItems(t *testing.T, newRepos NewRepos) {
 		}
 	})
 
-	t.Run("SearchIgnoresNotesAndTags", func(t *testing.T) {
+	t.Run("SearchMatchesAliasesAndTags", func(t *testing.T) {
+		repos := newRepos(t)
+		ctx := t.Context()
+
+		room := createRoom(t, repos, "Garage")
+		location := inventory.RoomLocation(room.ID)
+		screwdriver := inventory.Item{
+			Name:     "Cacciavite",
+			Quantity: 1,
+			Aliases:  []string{"giravite"},
+			Tags:     []string{"strumenti"},
+			Location: location,
+		}
+		requiresNoError(t, repos.Items.Create(ctx, &screwdriver), "creating item")
+		createItem(t, repos, "Hammer", location)
+
+		byAlias, err := repos.Items.Search(ctx, "giravite")
+		requiresNoError(t, err, "Search by alias")
+		if names := itemNames(byAlias); !slices.Equal(names, []string{"Cacciavite"}) {
+			t.Fatalf("Search by alias = %v, want [Cacciavite]", names)
+		}
+
+		byTag, err := repos.Items.Search(ctx, "strumenti")
+		requiresNoError(t, err, "Search by tag")
+		if names := itemNames(byTag); !slices.Equal(names, []string{"Cacciavite"}) {
+			t.Fatalf("Search by tag = %v, want [Cacciavite]", names)
+		}
+
+		// The match carries the labels that matched, like every other read.
+		if !slices.Equal(byAlias[0].Aliases, []string{"giravite"}) || !slices.Equal(byAlias[0].Tags, []string{"strumenti"}) {
+			t.Fatalf("Search result = %+v, want its aliases and tags", byAlias[0])
+		}
+	})
+
+	t.Run("SearchIgnoresNotes", func(t *testing.T) {
 		repos := newRepos(t)
 		ctx := t.Context()
 
@@ -600,17 +748,14 @@ func testItems(t *testing.T, newRepos NewRepos) {
 			Name:     "Drill",
 			Quantity: 1,
 			Notes:    "battery in the charger",
-			Tags:     []string{"cordless"},
 			Location: inventory.RoomLocation(room.ID),
 		}
 		requiresNoError(t, repos.Items.Create(ctx, &item), "creating item")
 
-		for _, query := range []string{"battery", "cordless"} {
-			matches, err := repos.Items.Search(ctx, query)
-			requiresNoError(t, err, "Search "+query)
-			if len(matches) != 0 {
-				t.Fatalf("Search(%q) = %v, want no matches: notes and tags are not searched", query, itemNames(matches))
-			}
+		matches, err := repos.Items.Search(ctx, "battery")
+		requiresNoError(t, err, "Search notes")
+		if len(matches) != 0 {
+			t.Fatalf("Search = %v, want no matches: notes are not searched", itemNames(matches))
 		}
 	})
 

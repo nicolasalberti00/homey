@@ -5,6 +5,7 @@
 		description: string;
 		quantity: number;
 		tags: string[];
+		aliases: string[];
 		notes: string;
 	};
 </script>
@@ -36,7 +37,16 @@
 	let description = $state(untrack(() => initial?.description ?? ''));
 	let quantity = $state<number | undefined>(untrack(() => initial?.quantity ?? 1));
 	let tags = $state(untrack(() => initial?.tags?.join(', ') ?? ''));
+	let aliases = $state(untrack(() => initial?.aliases?.join(', ') ?? ''));
 	let notes = $state(untrack(() => initial?.notes ?? ''));
+
+	// The API takes arrays; the inputs are comma-separated lists.
+	function parseList(value: string): string[] {
+		return value
+			.split(',')
+			.map((entry) => entry.trim())
+			.filter((entry) => entry !== '');
+	}
 
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -45,11 +55,8 @@
 			name: name.trim(),
 			description: description.trim(),
 			quantity: Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 1,
-			// The API takes a tag array; the input is a comma-separated list.
-			tags: tags
-				.split(',')
-				.map((tag) => tag.trim())
-				.filter((tag) => tag !== ''),
+			tags: parseList(tags),
+			aliases: parseList(aliases),
 			notes: notes.trim()
 		});
 	}
@@ -81,6 +88,17 @@
 	<div class="field">
 		<label for="item-description">Description <span class="muted">(optional)</span></label>
 		<input id="item-description" bind:value={description} maxlength="2000" autocomplete="off" />
+	</div>
+	<div class="field">
+		<label for="item-aliases">Aliases <span class="muted">(comma-separated)</span></label>
+		<input
+			id="item-aliases"
+			bind:value={aliases}
+			maxlength="2400"
+			autocomplete="off"
+			aria-describedby="item-aliases-hint"
+		/>
+		<p id="item-aliases-hint" class="hint">Other names the item answers to, such as “giravite”.</p>
 	</div>
 	<div class="field">
 		<label for="item-notes">Notes <span class="muted">(optional)</span></label>
@@ -118,5 +136,11 @@
 		display: flex;
 		align-items: center;
 		gap: 0.6rem;
+	}
+
+	.hint {
+		margin: 0.35rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
 	}
 </style>

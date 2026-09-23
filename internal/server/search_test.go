@@ -87,6 +87,35 @@ func TestSearchMatchesNameAndDescription(t *testing.T) {
 	}
 }
 
+func TestSearchMatchesAliasesAndTags(t *testing.T) {
+	api, bearer := newTestAPI(t)
+
+	room := createRoomViaAPI(t, api, bearer.Write, "Garage")
+	location := LocationRef{Kind: "room", ID: room.ID}
+	screwdriver := postItem(t, api, bearer.Write, ItemInput{
+		Name:     "Cacciavite",
+		Quantity: 1,
+		Aliases:  []string{"giravite"},
+		Tags:     []string{"strumenti"},
+		Location: location,
+	})
+	postItem(t, api, bearer.Write, ItemInput{Name: "Hammer", Quantity: 1, Location: location})
+
+	for _, query := range []string{"giravite", "strumenti"} {
+		rec := api.Get("/search?q="+query, bearer.Read)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+		}
+		var results []ItemResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &results); err != nil {
+			t.Fatalf("decoding response: %v", err)
+		}
+		if len(results) != 1 || results[0].ID != screwdriver.ID {
+			t.Fatalf("Search(%q) = %+v, want the screwdriver", query, results)
+		}
+	}
+}
+
 func TestSearchOrdersByName(t *testing.T) {
 	api, bearer := newTestAPI(t)
 

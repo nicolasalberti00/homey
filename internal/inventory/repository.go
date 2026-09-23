@@ -25,13 +25,16 @@ import "context"
 //   - Item tags are trimmed, case-insensitively unique within their item,
 //     limited to MaxTagsPerItem tags of MaxTagLen characters, and returned
 //     ordered case-insensitively.
+//   - Item aliases follow the same rules as tags — trimmed, unique within
+//     their item, limited to MaxAliasesPerItem aliases of MaxNameLen
+//     characters, returned ordered — because they are alternative names.
 //   - Move changes only the location: an item keeps every other field, and a
 //     container carries its whole subtree into the destination room.
 //   - Listings are ordered by name, case-insensitively, then by ID, and
 //     return a non-nil empty slice when nothing matches.
 //   - Search matches the query as a case-insensitive substring of an item's
-//     name or description and returns its matches in listing order; a query
-//     that is empty after trimming matches nothing.
+//     name, description, aliases or tags and returns its matches in listing
+//     order; a query that is empty after trimming matches nothing.
 //   - Entities read from storage carry their ID and UTC timestamps.
 //
 // All methods accept a context and are safe for concurrent use.
@@ -100,10 +103,10 @@ type ItemRepo interface {
 	// ListByLocation returns the items that sit directly in the given room
 	// or container.
 	ListByLocation(ctx context.Context, location Location) ([]Item, error)
-	// Search returns the items whose name or description contains query as a
-	// case-insensitive substring, ordered like List. The query is trimmed
-	// first; when nothing is left it matches nothing. Wildcards (%, _) are
-	// literal characters. The result is never nil.
+	// Search returns the items whose name, description, aliases or tags
+	// contain query as a case-insensitive substring, ordered like List. The
+	// query is trimmed first; when nothing is left it matches nothing.
+	// Wildcards (%, _) are literal characters. The result is never nil.
 	Search(ctx context.Context, query string) ([]Item, error)
 	// Update replaces the stored fields of item, including its location, and
 	// refreshes its updated timestamp.

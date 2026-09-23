@@ -22,6 +22,9 @@ const (
 	MaxTagLen = 40
 	// MaxTagsPerItem is the maximum number of tags one item can carry.
 	MaxTagsPerItem = 20
+	// MaxAliasesPerItem is the maximum number of aliases one item can carry.
+	// A single alias is bounded by MaxNameLen: it is an alternative name.
+	MaxAliasesPerItem = 20
 )
 
 // Normalize trims surrounding whitespace from the user-provided text fields
@@ -46,6 +49,9 @@ func (i *Item) Normalize() {
 	i.Notes = strings.TrimSpace(i.Notes)
 	for index, tag := range i.Tags {
 		i.Tags[index] = strings.TrimSpace(tag)
+	}
+	for index, alias := range i.Aliases {
+		i.Aliases[index] = strings.TrimSpace(alias)
 	}
 }
 
@@ -89,6 +95,7 @@ func (i *Item) Validate() error {
 		v.add("quantity", fmt.Sprintf("must be at most %d", MaxQuantity))
 	}
 	validateTags(v, "tags", i.Tags)
+	validateAliases(v, "aliases", i.Aliases)
 	validateLocation(v, "location", i.Location)
 	return v.orNil()
 }
@@ -135,6 +142,32 @@ func validateTags(v *ValidationError, field string, tags []string) {
 		key := strings.ToLower(tag)
 		if seen[key] {
 			v.add(field, fmt.Sprintf("tag %d duplicates %q", position, tag))
+			continue
+		}
+		seen[key] = true
+	}
+}
+
+// validateAliases checks the item aliases: at most MaxAliasesPerItem, each
+// non-empty and within the name limit, without case-insensitive duplicates.
+func validateAliases(v *ValidationError, field string, aliases []string) {
+	if len(aliases) > MaxAliasesPerItem {
+		v.add(field, fmt.Sprintf("must contain at most %d aliases", MaxAliasesPerItem))
+	}
+	seen := make(map[string]bool, len(aliases))
+	for index, alias := range aliases {
+		position := index + 1
+		trimmed := strings.TrimSpace(alias)
+		if trimmed == "" {
+			v.add(field, fmt.Sprintf("alias %d must not be empty", position))
+			continue
+		}
+		if n := len([]rune(trimmed)); n > MaxNameLen {
+			v.add(field, fmt.Sprintf("alias %d must be at most %d characters", position, MaxNameLen))
+		}
+		key := strings.ToLower(alias)
+		if seen[key] {
+			v.add(field, fmt.Sprintf("alias %d duplicates %q", position, alias))
 			continue
 		}
 		seen[key] = true

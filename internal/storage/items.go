@@ -43,15 +43,6 @@ FROM items
 WHERE container_id = ?
 ORDER BY name COLLATE NOCASE, id`
 
-	// LIKE is case-insensitive for ASCII by default, which is the same
-	// folding the COLLATE NOCASE ordering uses. The query is passed as a
-	// pattern with its wildcards escaped (see likePattern).
-	searchItemsSQL = `
-SELECT id, room_id, container_id, name, description, quantity, notes, created_at, updated_at
-FROM items
-WHERE name LIKE ? ESCAPE '\' OR description LIKE ? ESCAPE '\'
-ORDER BY name COLLATE NOCASE, id`
-
 	updateItemSQL = `
 UPDATE items
 SET room_id = ?,
@@ -102,13 +93,62 @@ FROM item_tags it
 WHERE it.item_id IN (SELECT id FROM items WHERE container_id = ?)
 ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
 
+	insertItemAliasSQL = `INSERT INTO item_aliases (item_id, alias) VALUES (?, ?)`
+
+	deleteItemAliasesSQL = `DELETE FROM item_aliases WHERE item_id = ?`
+
+	getItemAliasesSQL = `
+SELECT alias
+FROM item_aliases
+WHERE item_id = ?
+ORDER BY alias COLLATE NOCASE, alias`
+
+	listItemAliasesSQL = `
+SELECT ia.item_id, ia.alias
+FROM item_aliases ia
+WHERE ia.item_id IN (SELECT id FROM items)
+ORDER BY ia.item_id, ia.alias COLLATE NOCASE, ia.alias`
+
+	listItemAliasesByRoomSQL = `
+SELECT ia.item_id, ia.alias
+FROM item_aliases ia
+WHERE ia.item_id IN (SELECT id FROM items WHERE room_id = ?)
+ORDER BY ia.item_id, ia.alias COLLATE NOCASE, ia.alias`
+
+	listItemAliasesByContainerSQL = `
+SELECT ia.item_id, ia.alias
+FROM item_aliases ia
+WHERE ia.item_id IN (SELECT id FROM items WHERE container_id = ?)
+ORDER BY ia.item_id, ia.alias COLLATE NOCASE, ia.alias`
+
+	// A search match is a case-insensitive substring of the item's name, its
+	// description, one of its aliases or one of its tags. The predicate is
+	// composed into the statements below at compile time, so it stays in one
+	// place; it always carries four ? placeholders, all bound to the same
+	// pattern. LIKE folds ASCII case, the same folding the COLLATE NOCASE
+	// ordering uses.
+	searchMatchSQL = `name LIKE ? ESCAPE '\'` +
+		` OR description LIKE ? ESCAPE '\'` +
+		` OR EXISTS (SELECT 1 FROM item_aliases a WHERE a.item_id = items.id AND a.alias LIKE ? ESCAPE '\')` +
+		` OR EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND t.tag LIKE ? ESCAPE '\')`
+
+	searchItemsSQL = `
+SELECT id, room_id, container_id, name, description, quantity, notes, created_at, updated_at
+FROM items
+WHERE ` + searchMatchSQL + `
+ORDER BY name COLLATE NOCASE, id`
+
 	searchItemTagsSQL = `
 SELECT it.item_id, it.tag
 FROM item_tags it
-WHERE it.item_id IN (
-	SELECT id FROM items WHERE name LIKE ? ESCAPE '\' OR description LIKE ? ESCAPE '\'
-)
+WHERE it.item_id IN (SELECT id FROM items WHERE ` + searchMatchSQL + `)
 ORDER BY it.item_id, it.tag COLLATE NOCASE, it.tag`
+
+	searchItemAliasesSQL = `
+SELECT ia.item_id, ia.alias
+FROM item_aliases ia
+WHERE ia.item_id IN (SELECT id FROM items WHERE ` + searchMatchSQL + `)
+ORDER BY ia.item_id, ia.alias COLLATE NOCASE, ia.alias`
 )
 
 // Create implements inventory.ItemRepo.
@@ -134,7 +174,13 @@ func (r *itemRepo) Create(ctx context.Context, item *inventory.Item) error {
 		if err := replaceItemTags(ctx, tx, item.ID, item.Tags); err != nil {
 			return err
 		}
-		return loadItemTags(ctx, tx, item)
+		if err := replaceItemAliases(ctx, tx, item.ID, item.Aliases); err != nil {
+			return err
+		}
+		if err := loadItemTags(ctx, tx, item); err != nil {
+			return err
+		}
+		return loadItemAliases(ctx, tx, item)
 	})
 }
 
@@ -151,12 +197,15 @@ func (r *itemRepo) Get(ctx context.Context, id inventory.ItemID) (inventory.Item
 	if err := loadItemTags(ctx, r.db, &item); err != nil {
 		return inventory.Item{}, err
 	}
+	if err := loadItemAliases(ctx, r.db, &item); err != nil {
+		return inventory.Item{}, err
+	}
 	return item, nil
 }
 
 // List implements inventory.ItemRepo.
 func (r *itemRepo) List(ctx context.Context) ([]inventory.Item, error) {
-	return queryItems(ctx, r.db, listItemsSQL, listItemTagsSQL)
+	return queryItems(ctx, r.db, listItemsSQL, listItemTagsSQL, listItemAliasesSQL)
 }
 
 // ListByLocation implements inventory.ItemRepo.
@@ -168,9 +217,9 @@ func (r *itemRepo) ListByLocation(ctx context.Context, location inventory.Locati
 		return nil, err
 	}
 	if location.IsRoom() {
-		return queryItems(ctx, r.db, listItemsByRoomSQL, listItemTagsByRoomSQL, location.ID)
+		return queryItems(ctx, r.db, listItemsByRoomSQL, listItemTagsByRoomSQL, listItemAliasesByRoomSQL, location.ID)
 	}
-	return queryItems(ctx, r.db, listItemsByContainerSQL, listItemTagsByContainerSQL, location.ID)
+	return queryItems(ctx, r.db, listItemsByContainerSQL, listItemTagsByContainerSQL, listItemAliasesByContainerSQL, location.ID)
 }
 
 // Search implements inventory.ItemRepo.
@@ -180,7 +229,8 @@ func (r *itemRepo) Search(ctx context.Context, query string) ([]inventory.Item, 
 		return []inventory.Item{}, nil
 	}
 	pattern := likePattern(trimmed)
-	return queryItems(ctx, r.db, searchItemsSQL, searchItemTagsSQL, pattern, pattern)
+	return queryItems(ctx, r.db, searchItemsSQL, searchItemTagsSQL, searchItemAliasesSQL,
+		pattern, pattern, pattern, pattern)
 }
 
 // Update implements inventory.ItemRepo.
@@ -210,7 +260,13 @@ func (r *itemRepo) Update(ctx context.Context, item *inventory.Item) error {
 		if err := replaceItemTags(ctx, tx, item.ID, item.Tags); err != nil {
 			return err
 		}
-		return loadItemTags(ctx, tx, item)
+		if err := replaceItemAliases(ctx, tx, item.ID, item.Aliases); err != nil {
+			return err
+		}
+		if err := loadItemTags(ctx, tx, item); err != nil {
+			return err
+		}
+		return loadItemAliases(ctx, tx, item)
 	})
 }
 
@@ -337,6 +393,42 @@ func loadItemTags(ctx context.Context, q querier, item *inventory.Item) error {
 	return nil
 }
 
+// replaceItemAliases clears the aliases of an item and stores the given ones.
+func replaceItemAliases(ctx context.Context, tx *sql.Tx, itemID inventory.ItemID, aliases []string) error {
+	if _, err := tx.ExecContext(ctx, deleteItemAliasesSQL, itemID); err != nil {
+		return fmt.Errorf("clearing aliases of item %d: %w", itemID, err)
+	}
+	for _, alias := range aliases {
+		if _, err := tx.ExecContext(ctx, insertItemAliasSQL, itemID, alias); err != nil {
+			return fmt.Errorf("storing alias %q of item %d: %w", alias, itemID, err)
+		}
+	}
+	return nil
+}
+
+// loadItemAliases reads the aliases of one item, ordered case-insensitively.
+func loadItemAliases(ctx context.Context, q querier, item *inventory.Item) error {
+	rows, err := q.QueryContext(ctx, getItemAliasesSQL, item.ID)
+	if err != nil {
+		return fmt.Errorf("loading aliases of item %d: %w", item.ID, err)
+	}
+	defer rows.Close()
+
+	aliases := make([]string, 0, 4)
+	for rows.Next() {
+		var alias string
+		if err := rows.Scan(&alias); err != nil {
+			return err
+		}
+		aliases = append(aliases, alias)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("loading aliases of item %d: %w", item.ID, err)
+	}
+	item.Aliases = aliases
+	return nil
+}
+
 // attachItemTags loads the tags of a whole listing with one query and folds
 // them into the items, so listings do not pay one query per item.
 func attachItemTags(ctx context.Context, q querier, query string, args []any, items []inventory.Item) error {
@@ -376,9 +468,48 @@ func attachItemTags(ctx context.Context, q querier, query string, args []any, it
 	return nil
 }
 
+// attachItemAliases loads the aliases of a whole listing with one query and
+// folds them into the items, like attachItemTags does for tags.
+func attachItemAliases(ctx context.Context, q querier, query string, args []any, items []inventory.Item) error {
+	for index := range items {
+		if items[index].Aliases == nil {
+			items[index].Aliases = []string{}
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+
+	byID := make(map[inventory.ItemID]int, len(items))
+	for index, item := range items {
+		byID[item.ID] = index
+	}
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("listing item aliases: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var itemID inventory.ItemID
+		var alias string
+		if err := rows.Scan(&itemID, &alias); err != nil {
+			return err
+		}
+		if index, ok := byID[itemID]; ok {
+			items[index].Aliases = append(items[index].Aliases, alias)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("listing item aliases: %w", err)
+	}
+	return nil
+}
+
 // queryItems runs one of the constant item listings, scans the result and
-// attaches the tags of every item.
-func queryItems(ctx context.Context, q querier, query, tagsQuery string, args ...any) ([]inventory.Item, error) {
+// attaches the tags and aliases of every item.
+func queryItems(ctx context.Context, q querier, query, tagsQuery, aliasesQuery string, args ...any) ([]inventory.Item, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing items: %w", err)
@@ -397,6 +528,9 @@ func queryItems(ctx context.Context, q querier, query, tagsQuery string, args ..
 		return nil, fmt.Errorf("listing items: %w", err)
 	}
 	if err := attachItemTags(ctx, q, tagsQuery, args, items); err != nil {
+		return nil, err
+	}
+	if err := attachItemAliases(ctx, q, aliasesQuery, args, items); err != nil {
 		return nil, err
 	}
 	return items, nil

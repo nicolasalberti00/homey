@@ -170,6 +170,14 @@ components:
     ItemInput:
       additionalProperties: false
       properties:
+        aliases:
+          description: Other names the item answers to, searched like its name.
+          items:
+            type: string
+          maxItems: 20
+          type:
+            - array
+            - "null"
         description:
           description: Optional description of the item.
           maxLength: 2000
@@ -210,6 +218,12 @@ components:
     ItemPatch:
       additionalProperties: false
       properties:
+        aliases:
+          description: New alias set, replacing the existing one.
+          items:
+            type: string
+          maxItems: 20
+          type: array
         description:
           description: New description of the item.
           maxLength: 2000
@@ -239,6 +253,12 @@ components:
     ItemResponse:
       additionalProperties: false
       properties:
+        aliases:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         created_at:
           format: date-time
           type: string
@@ -278,6 +298,7 @@ components:
         - quantity
         - notes
         - tags
+        - aliases
         - location
         - created_at
         - updated_at
@@ -856,7 +877,7 @@ paths:
         - Rooms
   /search:
     get:
-      description: Matches the query against item names and descriptions, case-insensitively, and returns the matches ordered by name.
+      description: Matches the query against item names, descriptions, aliases and tags, case-insensitively, and returns the matches ordered by name.
       operationId: search
       parameters:
         - description: Free-text query.
