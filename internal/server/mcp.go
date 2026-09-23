@@ -1,10 +1,13 @@
 package server
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 
 	"github.com/nicolasalberti00/homey/internal/auth"
+	"github.com/nicolasalberti00/homey/internal/storage"
+	"github.com/nicolasalberti00/homey/internal/tools"
 	mcpserver "github.com/nicolasalberti00/homey/mcp/server"
 )
 
@@ -17,14 +20,32 @@ var mcpMethods = []string{http.MethodGet, http.MethodPost, http.MethodDelete}
 
 // mountMCP wires the MCP endpoint. When it is disabled the path answers 404
 // rather than the single-page app's shell: /mcp is not a client route.
-func mountMCP(mux *http.ServeMux, tokens auth.Store, logger *slog.Logger, enabled bool) {
+func mountMCP(mux *http.ServeMux, tokens auth.Store, logger *slog.Logger, enabled bool, repos storage.Repos) {
 	var handler http.Handler = http.NotFoundHandler()
 	if enabled {
-		handler = mcpAuth(tokens, logger, mcpserver.Handler(mcpserver.New(logger), logger))
+		server := mcpserver.New(logger, toolRegistry(logger, repos))
+		handler = mcpAuth(tokens, logger, mcpserver.Handler(server, logger))
 	}
 	for _, method := range mcpMethods {
 		mux.Handle(method+" /mcp", handler)
 	}
+}
+
+// toolRegistry builds the registry the endpoint serves. The definitions are
+// static, so a failure here is a programming mistake: stopping the process is
+// better than serving a server with a tool silently missing.
+func toolRegistry(logger *slog.Logger, repos storage.Repos) *tools.Registry {
+	inventory := tools.Inventory{Rooms: repos.Rooms, Containers: repos.Containers, Items: repos.Items}
+	list, err := inventory.Tools()
+	if err != nil {
+		panic(fmt.Sprintf("building the inventory tools: %v", err))
+	}
+	registry, err := tools.NewRegistry(list...)
+	if err != nil {
+		panic(fmt.Sprintf("building the tool registry: %v", err))
+	}
+	logger.Debug("tools registered", "tools", len(registry.List()))
+	return registry
 }
 
 // mcpAuth authenticates an MCP request with a bearer token. The MCP transport

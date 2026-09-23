@@ -11,7 +11,7 @@ import (
 // own test where the endpoint is mounted.
 func TestClientInitializesInProcess(t *testing.T) {
 	ctx := t.Context()
-	server := New(nil)
+	server := New(nil, nil)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(ctx, serverTransport, nil)

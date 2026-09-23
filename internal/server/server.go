@@ -62,13 +62,14 @@ func newHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB, ui fs.FS) h
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	repos := storage.NewRepos(db)
 	NewAPI(mux, Deps{
-		Repos:  storage.NewRepos(db),
+		Repos:  repos,
 		Tokens: tokens,
 		Logger: logger,
 	})
 
-	mountMCP(mux, tokens, logger, cfg.MCPEnabled)
+	mountMCP(mux, tokens, logger, cfg.MCPEnabled, repos)
 
 	// Everything else is the embedded single-page app. The pattern
 	// is method-scoped so unknown methods keep the mux's 405 behaviour.

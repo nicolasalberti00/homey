@@ -114,9 +114,14 @@ through tools instead of raw HTTP. It is **on by default** and switched off with
 
 The endpoint sits behind the same bearer tokens as the REST API: configure the
 client with a token (`Authorization: Bearer …`), and a request without one is
-answered with `401` and a `WWW-Authenticate` challenge. The tool registry and
-the per-tool permissions arrive with the steps that follow; today the server
-initializes and reports itself.
+answered with `401` and a `WWW-Authenticate` challenge.
+
+The tools come from one registry: today `count_items`, with the read, write and
+delete tools arriving as they are built. Each tool is a definition plus a
+handler that calls the core, and its JSON schemas are inferred from the Go
+types it is defined with — what a client sees and what the code accepts cannot
+drift apart. Inputs and outputs are validated in the registry, so the same tool
+can be served to another adapter without rewriting it.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/mcp \
