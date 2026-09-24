@@ -111,11 +111,14 @@ func (c *Confirmer) dropExpiredLocked() {
 }
 
 // Caller is who a tool is running for. The transport that authenticated the
-// request puts it in the context, so a tool can honour the caller's policy
-// without knowing anything about tokens or HTTP.
+// request puts it in the context, so a tool can honour the caller's permissions
+// and policies without knowing anything about tokens or HTTP.
 type Caller struct {
 	// Name identifies the caller in the audit trail.
 	Name string
+	// CanWrite marks a caller allowed to change the inventory. A read-only
+	// caller can explore but not add, change, move or delete.
+	CanWrite bool
 	// BypassConfirmation marks a caller trusted to run destructive tools
 	// without the confirmation step. It comes from the caller's own policy.
 	BypassConfirmation bool

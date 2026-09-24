@@ -134,6 +134,12 @@ func (t typedTool[In, Out]) InputSchema() *jsonschema.Schema  { return t.inputSc
 func (t typedTool[In, Out]) OutputSchema() *jsonschema.Schema { return t.outputSchema }
 
 func (t typedTool[In, Out]) Call(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	// The permission comes first: a caller that may not run the tool learns
+	// nothing about its arguments or the inventory.
+	if err := authorize(ctx, t.Name(), t.definition.Permission); err != nil {
+		return nil, err
+	}
+
 	// The schema validator works on JSON values, not on Go structs, so the
 	// arguments are checked in the shape the schema describes and the typed
 	// input is decoded from the value that passed.
@@ -194,11 +200,12 @@ func jsonValue(payload json.RawMessage, schema *jsonschema.Schema) (any, error) 
 // CallerError reports whether err is a failure the caller of a tool can act
 // on: input that does not fit the schema, an entity that does not exist, a
 // name that matches several places, a write that clashes with what is already
-// stored, a confirmation that is missing or no longer valid. A transport hands
-// these back to whoever made the call instead of reporting a failure of the
-// server.
+// stored, a confirmation that is missing or no longer valid, a caller that may
+// not run the tool. A transport hands these back to whoever made the call
+// instead of reporting a failure of the server.
 func CallerError(err error) bool {
 	return errors.Is(err, ErrInvalidInput) ||
+		errors.Is(err, ErrPermission) ||
 		errors.Is(err, ErrConfirmation) ||
 		errors.Is(err, inventory.ErrValidation) ||
 		errors.Is(err, inventory.ErrNotFound) ||

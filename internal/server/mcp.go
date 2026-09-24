@@ -90,6 +90,7 @@ func mcpAuth(tokens auth.Store, logger *slog.Logger, next http.Handler) http.Han
 		}
 		ctx := tools.WithCaller(r.Context(), tools.Caller{
 			Name:               token.Name,
+			CanWrite:           token.CanWrite(),
 			BypassConfirmation: token.DestructiveConfirmation == auth.ConfirmationBypass,
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))

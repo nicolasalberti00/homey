@@ -23,7 +23,7 @@ func (f fixture) fail(t *testing.T, name, input string) error {
 	if !found {
 		t.Fatalf("%s is not registered", name)
 	}
-	if _, err := tool.Call(t.Context(), json.RawMessage(input)); err == nil {
+	if _, err := tool.Call(writerContext(t), json.RawMessage(input)); err == nil {
 		t.Fatalf("%s(%s) was accepted, want a refusal", name, input)
 	} else {
 		return err

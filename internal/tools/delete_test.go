@@ -35,7 +35,7 @@ func TestDeleteItemAsksBeforeDeleting(t *testing.T) {
 	f := newFixture(t)
 	id := itoa(int64(f.ids["bits"]))
 
-	proposal, err := f.deleteAs(t, t.Context(), `{"id":`+id+`}`)
+	proposal, err := f.deleteAs(t, writerContext(t), `{"id":`+id+`}`)
 	if err != nil {
 		t.Fatalf("delete_item: %v", err)
 	}
@@ -70,11 +70,11 @@ func TestDeleteItemCarriesOutAConfirmedDeletion(t *testing.T) {
 	f := newFixture(t)
 	id := itoa(int64(f.ids["moka"]))
 
-	proposal, err := f.deleteAs(t, t.Context(), `{"id":`+id+`}`)
+	proposal, err := f.deleteAs(t, writerContext(t), `{"id":`+id+`}`)
 	if err != nil {
 		t.Fatalf("delete_item: %v", err)
 	}
-	done, err := f.deleteAs(t, t.Context(), `{"id":`+id+`,"confirmation_token":`+quote(proposal.ConfirmationToken)+`}`)
+	done, err := f.deleteAs(t, writerContext(t), `{"id":`+id+`,"confirmation_token":`+quote(proposal.ConfirmationToken)+`}`)
 	if err != nil {
 		t.Fatalf("delete_item with the token: %v", err)
 	}
@@ -109,18 +109,18 @@ func TestDeleteItemRefusesAnUnusableConfirmation(t *testing.T) {
 	f := newFixture(t)
 	bits := itoa(int64(f.ids["bits"]))
 
-	proposal, err := f.deleteAs(t, t.Context(), `{"id":`+bits+`}`)
+	proposal, err := f.deleteAs(t, writerContext(t), `{"id":`+bits+`}`)
 	if err != nil {
 		t.Fatalf("delete_item: %v", err)
 	}
 
 	// A token nobody issued.
-	if _, err := f.deleteAs(t, t.Context(), `{"id":`+bits+`,"confirmation_token":"made-up"}`); !errors.Is(err, ErrConfirmation) {
+	if _, err := f.deleteAs(t, writerContext(t), `{"id":`+bits+`,"confirmation_token":"made-up"}`); !errors.Is(err, ErrConfirmation) {
 		t.Fatalf("an invented token = %v, want ErrConfirmation", err)
 	}
 	// A token issued for another item.
 	moka := itoa(int64(f.ids["moka"]))
-	_, err = f.deleteAs(t, t.Context(), `{"id":`+moka+`,"confirmation_token":`+quote(proposal.ConfirmationToken)+`}`)
+	_, err = f.deleteAs(t, writerContext(t), `{"id":`+moka+`,"confirmation_token":`+quote(proposal.ConfirmationToken)+`}`)
 	if !errors.Is(err, ErrConfirmation) {
 		t.Fatalf("a token for another item = %v, want ErrConfirmation", err)
 	}
@@ -129,7 +129,7 @@ func TestDeleteItemRefusesAnUnusableConfirmation(t *testing.T) {
 	}
 	// A token that has run out of time.
 	f.confirmer.now = func() time.Time { return time.Now().Add(time.Hour) }
-	if _, err := f.deleteAs(t, t.Context(), `{"id":`+bits+`,"confirmation_token":`+quote(proposal.ConfirmationToken)+`}`); !errors.Is(err, ErrConfirmation) {
+	if _, err := f.deleteAs(t, writerContext(t), `{"id":`+bits+`,"confirmation_token":`+quote(proposal.ConfirmationToken)+`}`); !errors.Is(err, ErrConfirmation) {
 		t.Fatalf("an expired token = %v, want ErrConfirmation", err)
 	}
 
@@ -150,7 +150,7 @@ func TestDeleteItemBypassesWithConfirm(t *testing.T) {
 	f := newFixture(t)
 	id := itoa(int64(f.ids["bits"]))
 
-	done, err := f.deleteAs(t, t.Context(), `{"id":`+id+`,"confirm":true}`)
+	done, err := f.deleteAs(t, writerContext(t), `{"id":`+id+`,"confirm":true}`)
 	if err != nil {
 		t.Fatalf("delete_item: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestDeleteItemBypassesForATrustedCaller(t *testing.T) {
 	f := newFixture(t)
 	id := itoa(int64(f.ids["bits"]))
 
-	ctx := WithCaller(t.Context(), Caller{Name: "automation", BypassConfirmation: true})
+	ctx := WithCaller(t.Context(), Caller{Name: "automation", CanWrite: true, BypassConfirmation: true})
 	done, err := f.deleteAs(t, ctx, `{"id":`+id+`}`)
 	if err != nil {
 		t.Fatalf("delete_item: %v", err)
@@ -200,7 +200,7 @@ func TestUntrustedCallerStillAsks(t *testing.T) {
 	f := newFixture(t)
 	id := itoa(int64(f.ids["bits"]))
 
-	ctx := WithCaller(t.Context(), Caller{Name: "assistant"})
+	ctx := WithCaller(t.Context(), Caller{Name: "assistant", CanWrite: true})
 	proposal, err := f.deleteAs(t, ctx, `{"id":`+id+`}`)
 	if err != nil {
 		t.Fatalf("delete_item: %v", err)
@@ -218,7 +218,7 @@ func TestUntrustedCallerStillAsks(t *testing.T) {
 func TestDeleteItemReportsAMissingItem(t *testing.T) {
 	f := newFixture(t)
 
-	_, err := f.deleteAs(t, t.Context(), `{"id":4242}`)
+	_, err := f.deleteAs(t, writerContext(t), `{"id":4242}`)
 	if !errors.Is(err, inventory.ErrNotFound) {
 		t.Fatalf("delete_item on a missing item = %v, want ErrNotFound", err)
 	}
