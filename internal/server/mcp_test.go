@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -156,4 +157,117 @@ type headerTransport struct {
 func (h *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Set("Authorization", h.authorization)
 	return http.DefaultTransport.RoundTrip(req)
+}
+
+// TestMCPClientListsAndCallsTools walks the whole path: the registry describes
+// the tool, the transport carries it, and the call reaches the same database
+// the REST API writes to.
+func TestMCPClientListsAndCallsTools(t *testing.T) {
+	url, authorization := mcpTestServer(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	// One item, created through the REST API with the same token.
+	postJSON(t, ctx, url+"/api/v1/rooms", authorization, `{"name":"Garage"}`)
+	postJSON(t, ctx, url+"/api/v1/items", authorization, `{"name":"Trapano","quantity":1,"location":{"kind":"room","id":1}}`)
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "homey-test", Version: "0"}, nil)
+	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
+		Endpoint:   url + "/mcp",
+		HTTPClient: &http.Client{Transport: &headerTransport{authorization: authorization}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("connecting: %v", err)
+	}
+	defer session.Close()
+
+	list, err := session.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("listing tools: %v", err)
+	}
+	var names []string
+	for _, tool := range list.Tools {
+		names = append(names, tool.Name)
+	}
+	if !slices.Contains(names, "count_items") {
+		t.Fatalf("tools = %v, want count_items", names)
+	}
+	for _, tool := range list.Tools {
+		if tool.Name == "count_items" && tool.InputSchema == nil {
+			t.Fatal("count_items came without an input schema")
+		}
+	}
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "count_items"})
+	if err != nil {
+		t.Fatalf("calling count_items: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("count_items failed: %s", textOf(result))
+	}
+	if got := structuredCount(t, result); got != 1 {
+		t.Fatalf("count_items = %d, want the item the API created", got)
+	}
+
+	// Arguments that do not fit the schema come back as a tool error, which is
+	// what the protocol asks a server to hand a model.
+	bad, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "count_items",
+		Arguments: map[string]any{"tag": 7},
+	})
+	if err != nil {
+		t.Fatalf("calling count_items with a bad argument: %v", err)
+	}
+	if !bad.IsError {
+		t.Fatal("a bad argument was not reported as a tool error")
+	}
+	if text := textOf(bad); !strings.Contains(text, "invalid tool input") {
+		t.Fatalf("tool error = %q, want the validation message", text)
+	}
+}
+
+// postJSON sends a request to the REST API and fails the test unless it is
+// accepted.
+func postJSON(t *testing.T, ctx context.Context, url, authorization, body string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("building the request: %v", err)
+	}
+	req.Header.Set("Authorization", authorization)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("posting to %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST %s = %d: %s", url, resp.StatusCode, payload)
+	}
+}
+
+// structuredCount reads the count out of a tool result.
+func structuredCount(t *testing.T, result *mcp.CallToolResult) int {
+	t.Helper()
+	content, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured content = %#v, want an object", result.StructuredContent)
+	}
+	count, ok := content["count"].(float64)
+	if !ok {
+		t.Fatalf("count = %#v, want a number", content["count"])
+	}
+	return int(count)
+}
+
+// textOf returns the text a result carries, which is what a model reads.
+func textOf(result *mcp.CallToolResult) string {
+	var text strings.Builder
+	for _, content := range result.Content {
+		if typed, ok := content.(*mcp.TextContent); ok {
+			text.WriteString(typed.Text)
+		}
+	}
+	return text.String()
 }

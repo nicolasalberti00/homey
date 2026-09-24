@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/nicolasalberti00/homey/internal/tools"
 )
 
 // Name is the server name a client sees during initialization.
@@ -26,13 +28,18 @@ const sessionTimeout = 30 * time.Minute
 const instructions = "homey is a self-hosted home inventory: rooms hold containers, containers hold items. " +
 	"Search before answering, and answer with the location path a result carries instead of guessing one."
 
-// New builds the MCP server. It is cheap and holds no connection state: the
+// New builds the MCP server with the tools of registry, which may be nil for a
+// server that offers none. It is cheap and holds no connection state: the
 // transport owns the sessions.
-func New(logger *slog.Logger) *mcp.Server {
-	return mcp.NewServer(
+func New(logger *slog.Logger, registry *tools.Registry) *mcp.Server {
+	server := mcp.NewServer(
 		&mcp.Implementation{Name: Name, Version: version()},
 		&mcp.ServerOptions{Instructions: instructions, Logger: logger},
 	)
+	if registry != nil {
+		registerTools(server, registry)
+	}
+	return server
 }
 
 // Handler serves server over the Streamable HTTP transport.
