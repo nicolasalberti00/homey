@@ -5,11 +5,10 @@ room and location, manage them from a Web UI and interact with them through
 LLMs via MCP. No cloud account, no external database, no mandatory AI
 provider.
 
-> **Status: Phase 3 (REST API) complete.** The repository ships a
-> versioned REST API with a generated OpenAPI 3.1 contract, bearer-token
-> auth and rate limiting on a SQLite-backed inventory core (rooms,
-> containers, items, tags, moves). Upcoming: Web UI (Phase 4), search
-> (Phase 5), MCP (Phase 6).
+> **Status: Phase 6 (MCP) in progress.** The REST API, Web UI and search are
+> complete, and the MCP endpoint serves read and write tools — including
+> deletion guarded by a confirmation step and an explicit, audited bypass.
+> Remaining: MCP permissions, ambiguity handling, hardening (Phase 7).
 
 ## Quickstart (Docker)
 
@@ -134,6 +133,7 @@ Writing:
 | `add_item` | records a new item in a room or container that already exists, and answers with its id |
 | `update_item` | changes the fields it is given — name, description, quantity, tags, aliases, notes — and leaves the others alone |
 | `move_item` | puts an item in another room or container, leaving everything else about it alone |
+| `delete_item` | removes an item for good, after a confirmation step (see below) |
 
 Each tool is a definition plus a handler that calls the core, and its JSON
 schemas are inferred from the Go types it is defined with — what a client sees
@@ -147,8 +147,21 @@ bare name accepted when only one place carries it. A name that fits several
 places fails with the candidates listed, so a model can ask which one was
 meant instead of guessing; the same goes for an item that does not exist.
 
-Deleting, and the confirmation flow that guards it, arrive next: nothing here
-removes anything.
+### Deleting asks first
+
+`delete_item` deletes for good, and never silently. By default it asks:
+
+1. A call with just an `id` answers `confirmation: "pending"`, the item that
+   would go, and a short-lived `confirmation_token` — **nothing is removed**.
+2. Calling it again with that token in `confirmation_token` carries the
+   deletion out and answers `confirmation: "confirmed"`.
+
+The token lasts two minutes and is bound to that one action: it cannot be
+replayed or spent on a different item. A caller that has already confirmed in
+the same turn passes `confirm: true` to delete at once. A token created with
+`--destructive-confirmation=bypass` deletes without the extra step on every
+call. Both bypasses are recorded as `confirmation: "bypassed"` in the audit
+log, so a trusted automation is never invisible.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/mcp \
@@ -173,8 +186,9 @@ go run ./cmd/server token revoke <id>
 ```
 
 `--scope read` allows only reads; `--scope read,write` also allows mutations.
-`--destructive-confirmation=bypass` marks a trusted token for the future
-two-step destructive flows (Phase 6). Without a token the API answers `401`;
+`--destructive-confirmation=bypass` marks a token that may run destructive
+tools (currently `delete_item`) without the confirmation step; the bypass is
+recorded in the audit log. Without a token the API answers `401`;
 a read-only token gets `403` on mutating operations. Repeated failed
 authentications from one address are answered with `429` (see
 `HOMEY_RATE_LIMIT_AUTH_FAILURES`); mutating requests are rate limited the

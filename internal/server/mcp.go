@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -35,7 +36,12 @@ func mountMCP(mux *http.ServeMux, tokens auth.Store, logger *slog.Logger, enable
 // static, so a failure here is a programming mistake: stopping the process is
 // better than serving a server with a tool silently missing.
 func toolRegistry(logger *slog.Logger, repos storage.Repos) *tools.Registry {
-	inventory := tools.Inventory{Rooms: repos.Rooms, Containers: repos.Containers, Items: repos.Items}
+	inventory := tools.Inventory{
+		Rooms:      repos.Rooms,
+		Containers: repos.Containers,
+		Items:      repos.Items,
+		Audit:      auditToLog(logger),
+	}
 	list, err := inventory.Tools()
 	if err != nil {
 		panic(fmt.Sprintf("building the inventory tools: %v", err))
@@ -48,12 +54,28 @@ func toolRegistry(logger *slog.Logger, repos storage.Repos) *tools.Registry {
 	return registry
 }
 
+// auditToLog records a destructive action in the structured log. The key is the
+// one the audit trail will use when Phase 7 gives it a table: a bypassed
+// confirmation is written as confirmation=bypassed.
+func auditToLog(logger *slog.Logger) tools.AuditFunc {
+	return func(_ context.Context, event tools.AuditEvent) {
+		logger.Info("audit",
+			"tool", event.Tool,
+			"item_id", event.ItemID,
+			"caller", event.Caller,
+			"confirmation", event.Confirmation,
+		)
+	}
+}
+
 // mcpAuth authenticates an MCP request with a bearer token. The MCP transport
 // is a plain http.Handler rather than a Huma operation, so it needs its own
 // check; the rejection is reported as a problem document, like the API's.
 //
-// Any valid token may connect for now: the tools that write arrive with the
-// registry, and the per-tool permissions with it.
+// The authenticated token travels into the request context, so a tool can
+// honour the caller's destructive-confirmation policy without reading headers.
+// The transport keeps that context for the life of the session, so the policy
+// in force is the one of the token that opened it.
 func mcpAuth(tokens auth.Store, logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		plaintext, ok := bearerToken(r.Header.Get("Authorization"))
@@ -61,11 +83,16 @@ func mcpAuth(tokens auth.Store, logger *slog.Logger, next http.Handler) http.Han
 			writeMCPAuthFailure(w, logger, r, "missing or malformed bearer token")
 			return
 		}
-		if _, found := tokens.Authenticate(r.Context(), auth.Hash(plaintext)); !found {
+		token, found := tokens.Authenticate(r.Context(), auth.Hash(plaintext))
+		if !found {
 			writeMCPAuthFailure(w, logger, r, "invalid or revoked token")
 			return
 		}
-		next.ServeHTTP(w, r)
+		ctx := tools.WithCaller(r.Context(), tools.Caller{
+			Name:               token.Name,
+			BypassConfirmation: token.DestructiveConfirmation == auth.ConfirmationBypass,
+		})
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
