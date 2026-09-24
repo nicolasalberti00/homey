@@ -17,6 +17,8 @@ import (
 	"sort"
 
 	"github.com/google/jsonschema-go/jsonschema"
+
+	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
 // Permission is what a tool requires of its caller.
@@ -187,6 +189,17 @@ func jsonValue(payload json.RawMessage, schema *jsonschema.Schema) (any, error) 
 		return map[string]any{}, nil
 	}
 	return value, nil
+}
+
+// CallerError reports whether err is a failure the caller of a tool can act
+// on: input that does not fit the schema, an entity that does not exist, a
+// name that matches several places. A transport hands these back to whoever
+// made the call instead of reporting a failure of the server.
+func CallerError(err error) bool {
+	return errors.Is(err, ErrInvalidInput) ||
+		errors.Is(err, inventory.ErrValidation) ||
+		errors.Is(err, inventory.ErrNotFound) ||
+		errors.Is(err, inventory.ErrAmbiguous)
 }
 
 // Registry is the set of tools an adapter serves.

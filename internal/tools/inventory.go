@@ -1,10 +1,6 @@
 package tools
 
 import (
-	"context"
-	"slices"
-	"strings"
-
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
@@ -16,46 +12,66 @@ type Inventory struct {
 	Items      inventory.ItemRepo
 }
 
-// CountItemsInput is what count_items takes.
-type CountItemsInput struct {
-	Tag string `json:"tag,omitempty" jsonschema:"count only the items carrying this tag"`
-}
+const (
+	// defaultSearchLimit is how many candidates search_inventory returns when
+	// the caller does not say.
+	defaultSearchLimit = 10
+	// maxSearchLimit caps the candidates, so one call cannot flood a caller
+	// with the whole inventory.
+	maxSearchLimit = 50
+)
 
-// CountItemsOutput is what count_items answers.
-type CountItemsOutput struct {
-	Count int `json:"count" jsonschema:"how many items matched"`
-}
-
-// CountItems counts the items of the inventory, or only those carrying a tag.
-func (inv Inventory) CountItems(ctx context.Context, input CountItemsInput) (CountItemsOutput, error) {
-	items, err := inv.Items.List(ctx)
-	if err != nil {
-		return CountItemsOutput{}, err
-	}
-	if input.Tag == "" {
-		return CountItemsOutput{Count: len(items)}, nil
-	}
-	matches := 0
-	for _, item := range items {
-		if slices.ContainsFunc(item.Tags, func(tag string) bool { return strings.EqualFold(tag, input.Tag) }) {
-			matches++
-		}
-	}
-	return CountItemsOutput{Count: matches}, nil
-}
-
-// Tools returns the tools of the inventory, each one a definition and a
-// handler. Adding one is a definition here and a method above.
+// Tools returns the read tools of the inventory, each one a definition and a
+// handler. Adding a tool is a definition here and a method in this package.
 func (inv Inventory) Tools() ([]Tool, error) {
+	searchInventory, err := New(Definition[SearchInventoryInput, SearchInventoryOutput]{
+		Name: "search_inventory",
+		Description: "Search the home inventory by name, alias, tag or description and get where each match is. " +
+			"Use it whenever someone asks where something is (\"dov'è il trapano?\", \"dove tengo le batterie?\") " +
+			"or whether they own it: every result carries the location path, the quantity and the tags, so one call is usually enough. " +
+			"Several candidates can come back; when they are different items with the same name, ask which one is meant instead of picking one.",
+		Permission: PermissionRead,
+		Handler:    inv.SearchInventory,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	getItem, err := New(Definition[GetItemInput, ItemView]{
+		Name: "get_item",
+		Description: "Read one item by id, with everything stored about it: description, quantity, tags, aliases, notes and its location path. " +
+			"Use it when the id is already known, from search_inventory or from the person asking.",
+		Permission: PermissionRead,
+		Handler:    inv.GetItem,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	listLocation, err := New(Definition[ListLocationInput, ListLocationOutput]{
+		Name: "list_location",
+		Description: "List what sits directly in a room or in a container: the containers inside it and the items in it, one level deep. " +
+			"Without a location it lists the rooms of the home, which is how to find out what the home is made of. " +
+			"Use it for \"cosa c'è in garage?\" and \"cosa c'è nel cassetto 1?\"; to find a specific item, search_inventory is quicker.",
+		Permission: PermissionRead,
+		Handler:    inv.ListLocation,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	countItems, err := New(Definition[CountItemsInput, CountItemsOutput]{
 		Name: "count_items",
-		Description: "Count the items in the home inventory, optionally only those carrying a tag. " +
-			"Use it for questions like \"how many drills do I have?\" when the number is the answer and the items are not.",
+		Description: "Count the items of the home inventory, optionally only those carrying a tag or only those a room or container holds, " +
+			"including everything inside its containers. " +
+			"Use it when the number is the answer (\"quanti trapani ho?\", \"quante cose ci sono in garage?\"); " +
+			"when the items themselves are wanted, use search_inventory or list_location.",
 		Permission: PermissionRead,
 		Handler:    inv.CountItems,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return []Tool{countItems}, nil
+
+	return []Tool{searchInventory, getItem, listLocation, countItems}, nil
 }

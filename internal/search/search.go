@@ -1,6 +1,7 @@
 // Package search implements inventory search: it turns the candidates a
 // repository returns into ranked results, each carrying the match that
-// selected it and the full path of its location.
+// selected it and the full path of its location (rendered by the inventory's
+// LocationIndex, so every caller names a place the same way).
 //
 // The rules of matching live in the inventory core (SearchTerms) and in the
 // storage adapter (one query per search); this package owns what the results
@@ -77,7 +78,7 @@ func (e Engine) Search(ctx context.Context, query string) ([]Result, error) {
 	if len(items) == 0 {
 		return []Result{}, nil
 	}
-	locations, err := e.locations(ctx)
+	index, err := e.locationIndex(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +88,7 @@ func (e Engine) Search(ctx context.Context, query string) ([]Result, error) {
 		match, _ := Classify(item, terms)
 		results = append(results, Result{
 			Item:  item,
-			Path:  locations.path(item.Location),
+			Path:  index.Path(item.Location),
 			Match: match,
 		})
 	}
@@ -189,65 +190,16 @@ func classify(value, term string) (Kind, bool) {
 	return "", false
 }
 
-// locations resolves location paths from the rooms and containers of the
-// inventory, loaded once per search so a result list does not pay one query
-// per item.
-type locations struct {
-	rooms      map[inventory.RoomID]inventory.Room
-	containers map[inventory.ContainerID]inventory.Container
-}
-
-func (e Engine) locations(ctx context.Context) (locations, error) {
+// locationIndex loads the rooms and containers once per search, so a result
+// list does not pay one query per item.
+func (e Engine) locationIndex(ctx context.Context) (inventory.LocationIndex, error) {
 	rooms, err := e.Rooms.List(ctx)
 	if err != nil {
-		return locations{}, err
+		return inventory.LocationIndex{}, err
 	}
 	containers, err := e.Containers.List(ctx)
 	if err != nil {
-		return locations{}, err
+		return inventory.LocationIndex{}, err
 	}
-	index := locations{
-		rooms:      make(map[inventory.RoomID]inventory.Room, len(rooms)),
-		containers: make(map[inventory.ContainerID]inventory.Container, len(containers)),
-	}
-	for _, room := range rooms {
-		index.rooms[room.ID] = room
-	}
-	for _, container := range containers {
-		index.containers[container.ID] = container
-	}
-	return index, nil
-}
-
-// path renders a location as "Garage > Toolbox > Drawer 1". A location that
-// cannot be resolved renders as an empty path: a search never fails because
-// of a dangling reference.
-func (l locations) path(location inventory.Location) string {
-	if roomID, ok := location.RoomID(); ok {
-		return l.rooms[roomID].Name
-	}
-	containerID, ok := location.ContainerID()
-	if !ok {
-		return ""
-	}
-
-	chain := make([]inventory.Container, 0, 4)
-	seen := make(map[inventory.ContainerID]bool, 4)
-	for {
-		container, ok := l.containers[containerID]
-		if !ok || seen[container.ID] {
-			break
-		}
-		seen[container.ID] = true
-		chain = append(chain, container)
-		if container.ParentID == nil {
-			break
-		}
-		containerID = *container.ParentID
-	}
-	if len(chain) == 0 {
-		return ""
-	}
-	slices.Reverse(chain)
-	return inventory.ContainerPath{Room: l.rooms[chain[0].RoomID], Containers: chain}.String()
+	return inventory.NewLocationIndex(rooms, containers), nil
 }

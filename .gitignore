@@ -26,6 +26,9 @@ internal/webui/dist/*
 # local agent context overrides (personal, never commit)
 AGENTS.override.md
 
+# agent working state (todos, session scratch)
+.pi/
+
 # macOS
 .DS_Store
 

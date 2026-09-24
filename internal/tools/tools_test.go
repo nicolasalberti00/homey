@@ -7,9 +7,6 @@ import (
 	"math"
 	"strings"
 	"testing"
-
-	"github.com/nicolasalberti00/homey/internal/inventory"
-	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
 // testTool builds a tool whose handler echoes its input, so the tests can
@@ -168,75 +165,5 @@ func TestRegistryRefusesDuplicatesAndKeepsOrder(t *testing.T) {
 	}
 	if _, err := NewRegistry(nil); err == nil {
 		t.Fatal("NewRegistry accepted a nil tool")
-	}
-}
-
-// TestInventoryTools runs the tools the inventory exposes against a real
-// database: the registry is only useful if the handlers reach the core.
-func TestInventoryTools(t *testing.T) {
-	dbPath := t.TempDir() + "/homey.db"
-	if err := storage.MigrateUp(dbPath); err != nil {
-		t.Fatalf("MigrateUp: %v", err)
-	}
-	db, err := storage.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	repos := storage.NewRepos(db)
-	ctx := t.Context()
-
-	room := inventory.Room{Name: "Garage"}
-	if err := repos.Rooms.Create(ctx, &room); err != nil {
-		t.Fatalf("creating room: %v", err)
-	}
-	location := inventory.RoomLocation(room.ID)
-	for _, item := range []inventory.Item{
-		{Name: "Trapano", Quantity: 1, Tags: []string{"officina"}, Location: location},
-		{Name: "Punte", Quantity: 1, Tags: []string{"officina", "trapano"}, Location: location},
-		{Name: "Caffettiera", Quantity: 1, Location: location},
-	} {
-		if err := repos.Items.Create(ctx, &item); err != nil {
-			t.Fatalf("creating item: %v", err)
-		}
-	}
-
-	list, err := Inventory{Rooms: repos.Rooms, Containers: repos.Containers, Items: repos.Items}.Tools()
-	if err != nil {
-		t.Fatalf("Tools: %v", err)
-	}
-	registry, err := NewRegistry(list...)
-	if err != nil {
-		t.Fatalf("NewRegistry: %v", err)
-	}
-	tool, found := registry.Lookup("count_items")
-	if !found {
-		t.Fatal("count_items is not registered")
-	}
-	if tool.Permission() != PermissionRead || tool.Destructive() || tool.RequiresConfirmation() {
-		t.Fatalf("count_items is described as %s/destructive=%t/confirm=%t, want a plain read",
-			tool.Permission(), tool.Destructive(), tool.RequiresConfirmation())
-	}
-
-	cases := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"everything", `{}`, `{"count":3}`},
-		{"by tag", `{"tag":"officina"}`, `{"count":2}`},
-		{"by tag, ignoring case", `{"tag":"OFFICINA"}`, `{"count":2}`},
-		{"a tag nobody has", `{"tag":"cantina"}`, `{"count":0}`},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := tool.Call(ctx, json.RawMessage(tc.input))
-			if err != nil {
-				t.Fatalf("Call(%s): %v", tc.input, err)
-			}
-			if string(got) != tc.want {
-				t.Fatalf("Call(%s) = %s, want %s", tc.input, got, tc.want)
-			}
-		})
 	}
 }

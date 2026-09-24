@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -18,7 +19,30 @@ var (
 	ErrConflict = errors.New("inventory: conflict")
 	// ErrCycle reports that an operation would create a container cycle.
 	ErrCycle = errors.New("inventory: cycle")
+	// ErrAmbiguous reports that a name matches more than one entity. Errors
+	// matching ErrAmbiguous carry an *AmbiguousError listing the candidates.
+	ErrAmbiguous = errors.New("inventory: ambiguous")
 )
+
+// AmbiguousError lists the candidates a name could mean, so a caller can ask
+// which one was meant. It matches ErrAmbiguous with errors.Is.
+type AmbiguousError struct {
+	// Name is what the caller asked for, as it was given.
+	Name string
+	// Candidates are the paths of the entities that match it, in listing
+	// order.
+	Candidates []string
+}
+
+// Error implements the error interface.
+func (e *AmbiguousError) Error() string {
+	return fmt.Sprintf("inventory: %q matches %d places: %s", e.Name, len(e.Candidates), strings.Join(e.Candidates, "; "))
+}
+
+// Is reports that an AmbiguousError matches ErrAmbiguous.
+func (e *AmbiguousError) Is(target error) bool {
+	return target == ErrAmbiguous
+}
 
 // FieldProblem is one field-level validation problem.
 type FieldProblem struct {

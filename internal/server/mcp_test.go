@@ -189,12 +189,14 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 	for _, tool := range list.Tools {
 		names = append(names, tool.Name)
 	}
-	if !slices.Contains(names, "count_items") {
-		t.Fatalf("tools = %v, want count_items", names)
+	// The tool surface is a contract with the clients.
+	want := []string{"count_items", "get_item", "list_location", "search_inventory"}
+	if !slices.Equal(names, want) {
+		t.Fatalf("tools = %v, want %v", names, want)
 	}
 	for _, tool := range list.Tools {
-		if tool.Name == "count_items" && tool.InputSchema == nil {
-			t.Fatal("count_items came without an input schema")
+		if tool.InputSchema == nil || tool.OutputSchema == nil {
+			t.Fatalf("%s came without a schema", tool.Name)
 		}
 	}
 
@@ -207,6 +209,21 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 	}
 	if got := structuredCount(t, result); got != 1 {
 		t.Fatalf("count_items = %d, want the item the API created", got)
+	}
+
+	// The question the read tools exist for, over the wire.
+	found, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "search_inventory",
+		Arguments: map[string]any{"query": "trapano"},
+	})
+	if err != nil {
+		t.Fatalf("calling search_inventory: %v", err)
+	}
+	if found.IsError {
+		t.Fatalf("search_inventory failed: %s", textOf(found))
+	}
+	if got := structuredSearch(t, found); got != "Garage" {
+		t.Fatalf("search_inventory put the drill in %q, want the room the API created", got)
 	}
 
 	// Arguments that do not fit the schema come back as a tool error, which is
@@ -224,6 +241,29 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 	if text := textOf(bad); !strings.Contains(text, "invalid tool input") {
 		t.Fatalf("tool error = %q, want the validation message", text)
 	}
+}
+
+// structuredSearch reads the location of the first search result out of a tool
+// result.
+func structuredSearch(t *testing.T, result *mcp.CallToolResult) string {
+	t.Helper()
+	content, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structured content = %#v, want an object", result.StructuredContent)
+	}
+	results, ok := content["results"].([]any)
+	if !ok || len(results) == 0 {
+		t.Fatalf("results = %#v, want at least one", content["results"])
+	}
+	first, ok := results[0].(map[string]any)
+	if !ok {
+		t.Fatalf("results[0] = %#v, want an object", results[0])
+	}
+	location, ok := first["location"].(string)
+	if !ok {
+		t.Fatalf("location = %#v, want a path", first["location"])
+	}
+	return location
 }
 
 // postJSON sends a request to the REST API and fails the test unless it is
