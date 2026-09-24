@@ -16,6 +16,8 @@ Web UI. See `README.md` for the overview, configuration and roadmap.
   exit criteria.
 - Keep PRs small and focused; leave them for review — do not merge into `main`
   unless explicitly asked.
+- Write pull request titles and descriptions in English, like the rest of the
+  repository, regardless of the language the session is held in.
 
 ## Conventions
 
