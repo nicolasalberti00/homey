@@ -21,7 +21,7 @@ const (
 	maxSearchLimit = 50
 )
 
-// Tools returns the read tools of the inventory, each one a definition and a
+// Tools returns the tools of the inventory, each one a definition and a
 // handler. Adding a tool is a definition here and a method in this package.
 func (inv Inventory) Tools() ([]Tool, error) {
 	searchInventory, err := New(Definition[SearchInventoryInput, SearchInventoryOutput]{
@@ -73,5 +73,44 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		return nil, err
 	}
 
-	return []Tool{searchInventory, getItem, listLocation, countItems}, nil
+	addItem, err := New(Definition[AddItemInput, ItemView]{
+		Name: "add_item",
+		Description: "Add an item to the home inventory, in a room or in a container that already exists. " +
+			"Use it when someone says they put something away (\"ho messo il trapano nel toolbox\") or that it should be recorded. " +
+			"The answer carries the new id, so the item can be changed or moved next. If a place with that name does not exist, " +
+			"list_location shows what there is; if an item with the same name is already there, the call fails instead of overwriting it.",
+		Permission: PermissionWrite,
+		Handler:    inv.AddItem,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	updateItem, err := New(Definition[UpdateItemInput, ItemView]{
+		Name: "update_item",
+		Description: "Change what is stored about an item: its name, description, quantity, tags, aliases or notes. " +
+			"Only the fields given are changed, the others stay as they are, and tags and aliases replace the whole set. " +
+			"Where the item is does not change here: use move_item for that.",
+		Permission:  PermissionWrite,
+		Destructive: true,
+		Handler:     inv.UpdateItem,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	moveItem, err := New(Definition[MoveItemInput, ItemView]{
+		Name: "move_item",
+		Description: "Move an item to another room or container, leaving everything else about it alone. " +
+			"The destination is named the way a person names it: \"Garage\" or \"Garage > Toolbox\". " +
+			"Use it for \"metti il trapano nel toolbox in garage\" once the item id is known from search_inventory.",
+		Permission:  PermissionWrite,
+		Destructive: true,
+		Handler:     inv.MoveItem,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return []Tool{searchInventory, getItem, listLocation, countItems, addItem, updateItem, moveItem}, nil
 }

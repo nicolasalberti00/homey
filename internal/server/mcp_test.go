@@ -167,9 +167,12 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	// One item, created through the REST API with the same token.
+	// One room, one toolbox in it and one drill in the room, created through
+	// the REST API with the same token.
 	postJSON(t, ctx, url+"/api/v1/rooms", authorization, `{"name":"Garage"}`)
-	postJSON(t, ctx, url+"/api/v1/items", authorization, `{"name":"Trapano","quantity":1,"location":{"kind":"room","id":1}}`)
+	postJSON(t, ctx, url+"/api/v1/containers", authorization, `{"name":"Toolbox","room_id":1}`)
+	postJSON(t, ctx, url+"/api/v1/items", authorization,
+		`{"name":"Trapano","description":"Bosch","quantity":1,"location":{"kind":"room","id":1}}`)
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "homey-test", Version: "0"}, nil)
 	session, err := client.Connect(ctx, &mcp.StreamableClientTransport{
@@ -190,7 +193,7 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	// The tool surface is a contract with the clients.
-	want := []string{"count_items", "get_item", "list_location", "search_inventory"}
+	want := []string{"add_item", "count_items", "get_item", "list_location", "move_item", "search_inventory", "update_item"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
@@ -211,6 +214,16 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 		t.Fatalf("count_items = %d, want the item the API created", got)
 	}
 
+	// A host decides whether a tool needs care from these hints, so they are
+	// part of the contract too.
+	for _, tool := range list.Tools {
+		readOnly := tool.Name == "search_inventory" || tool.Name == "get_item" ||
+			tool.Name == "list_location" || tool.Name == "count_items"
+		if tool.Annotations == nil || tool.Annotations.ReadOnlyHint != readOnly {
+			t.Fatalf("%s readOnlyHint = %+v, want %t", tool.Name, tool.Annotations, readOnly)
+		}
+	}
+
 	// The question the read tools exist for, over the wire.
 	found, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "search_inventory",
@@ -224,6 +237,31 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 	}
 	if got := structuredSearch(t, found); got != "Garage" {
 		t.Fatalf("search_inventory put the drill in %q, want the room the API created", got)
+	}
+
+	// The write tools, in the order a model would use them: find the drill,
+	// then put it in the toolbox.
+	var drillID float64
+	for _, result := range searchResults(t, found) {
+		if result["name"] == "Trapano" {
+			drillID, _ = result["id"].(float64)
+		}
+	}
+	if drillID == 0 {
+		t.Fatal("search_inventory did not return the drill")
+	}
+	moved, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "move_item",
+		Arguments: map[string]any{"id": drillID, "destination": "Garage > Toolbox"},
+	})
+	if err != nil {
+		t.Fatalf("calling move_item: %v", err)
+	}
+	if moved.IsError {
+		t.Fatalf("move_item failed: %s", textOf(moved))
+	}
+	if got := structuredLocation(t, moved); got != "Garage > Toolbox" {
+		t.Fatalf("move_item put the drill in %q, want the toolbox", got)
 	}
 
 	// Arguments that do not fit the schema come back as a tool error, which is
@@ -247,21 +285,46 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 // result.
 func structuredSearch(t *testing.T, result *mcp.CallToolResult) string {
 	t.Helper()
+	results := searchResults(t, result)
+	location, ok := results[0]["location"].(string)
+	if !ok {
+		t.Fatalf("location = %#v, want a path", results[0]["location"])
+	}
+	return location
+}
+
+// searchResults returns the results of a search tool result.
+func searchResults(t *testing.T, result *mcp.CallToolResult) []map[string]any {
+	t.Helper()
 	content, ok := result.StructuredContent.(map[string]any)
 	if !ok {
 		t.Fatalf("structured content = %#v, want an object", result.StructuredContent)
 	}
-	results, ok := content["results"].([]any)
-	if !ok || len(results) == 0 {
+	raw, ok := content["results"].([]any)
+	if !ok || len(raw) == 0 {
 		t.Fatalf("results = %#v, want at least one", content["results"])
 	}
-	first, ok := results[0].(map[string]any)
-	if !ok {
-		t.Fatalf("results[0] = %#v, want an object", results[0])
+	results := make([]map[string]any, len(raw))
+	for index, entry := range raw {
+		results[index], ok = entry.(map[string]any)
+		if !ok {
+			t.Fatalf("results[%d] = %#v, want an object", index, entry)
+		}
 	}
-	location, ok := first["location"].(string)
+	return results
+}
+
+// structuredLocation reads the location out of a tool result that answers with
+// one item.
+func structuredLocation(t *testing.T, result *mcp.CallToolResult) string {
+	t.Helper()
+	content, ok := result.StructuredContent.(map[string]any)
 	if !ok {
-		t.Fatalf("location = %#v, want a path", first["location"])
+		t.Fatalf("structured content = %#v, want an object", result.StructuredContent)
+	}
+	location, ok := content["location"].(string)
+	if !ok {
+		t.Fatalf("location = %#v, want a path", content["location"])
 	}
 	return location
 }

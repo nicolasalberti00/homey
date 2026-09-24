@@ -116,7 +116,9 @@ The endpoint sits behind the same bearer tokens as the REST API: configure the
 client with a token (`Authorization: Bearer …`), and a request without one is
 answered with `401` and a `WWW-Authenticate` challenge.
 
-The tools come from one registry, and today they are the read ones:
+The tools come from one registry, and today they are these.
+
+Reading:
 
 | Tool | What it answers |
 | --- | --- |
@@ -124,6 +126,14 @@ The tools come from one registry, and today they are the read ones:
 | `get_item` | everything stored about one item, by id |
 | `list_location` | what sits directly in a room or a container; without one, the rooms of the home |
 | `count_items` | how many items match, optionally filtered by tag or place (a place counts everything inside it, containers included) |
+
+Writing:
+
+| Tool | What it does |
+| --- | --- |
+| `add_item` | records a new item in a room or container that already exists, and answers with its id |
+| `update_item` | changes the fields it is given — name, description, quantity, tags, aliases, notes — and leaves the others alone |
+| `move_item` | puts an item in another room or container, leaving everything else about it alone |
 
 Each tool is a definition plus a handler that calls the core, and its JSON
 schemas are inferred from the Go types it is defined with — what a client sees
@@ -137,7 +147,8 @@ bare name accepted when only one place carries it. A name that fits several
 places fails with the candidates listed, so a model can ask which one was
 meant instead of guessing; the same goes for an item that does not exist.
 
-The write and delete tools arrive as they are built.
+Deleting, and the confirmation flow that guards it, arrive next: nothing here
+removes anything.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/mcp \

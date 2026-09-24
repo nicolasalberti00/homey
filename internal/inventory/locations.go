@@ -50,8 +50,13 @@ func NewLocationIndex(rooms []Room, containers []Container) LocationIndex {
 			location: RoomLocation(room.ID),
 		})
 	}
+	// Every container goes in the map before any path is built: a listing is
+	// ordered by name, so a drawer can come before the toolbox that holds it,
+	// and a path must not depend on that.
 	for _, container := range containers {
 		index.containers[container.ID] = container
+	}
+	for _, container := range containers {
 		path := index.pathOf(container)
 		if path == "" {
 			continue
