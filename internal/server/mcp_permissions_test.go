@@ -74,8 +74,12 @@ func TestMCPWriteTokenStillWrites(t *testing.T) {
 
 	session := connectMCP(t, ctx, url, authorization)
 	added := callMCP(t, ctx, session, "add_item", map[string]any{"name": "Martello", "location": "Garage"})
-	if added["name"] != "Martello" {
-		t.Fatalf("added = %#v, want the new item", added)
+	item, ok := added["item"].(map[string]any)
+	if !ok {
+		t.Fatalf("add_item answered %#v, want the new item", added)
+	}
+	if item["name"] != "Martello" {
+		t.Fatalf("added = %#v, want the new item", item)
 	}
 }
 

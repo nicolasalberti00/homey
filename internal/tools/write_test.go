@@ -34,27 +34,27 @@ func (f fixture) fail(t *testing.T, name, input string) error {
 func TestAddItem(t *testing.T) {
 	f := newFixture(t)
 
-	var added ItemView
+	var added AddItemOutput
 	f.decode(t, "add_item", `{"name":"Martello","location":"Garage > Toolbox"}`, &added)
-	if added.ID == 0 {
+	if added.Item == nil || added.Item.ID == 0 {
 		t.Fatal("the new item came back without an id")
 	}
-	if added.Location != "Garage > Toolbox" {
-		t.Fatalf("location = %q, want the toolbox", added.Location)
+	if added.Item.Location != "Garage > Toolbox" {
+		t.Fatalf("location = %q, want the toolbox", added.Item.Location)
 	}
 	// A quantity nobody asked for is one of the thing.
-	if added.Quantity != 1 {
-		t.Fatalf("quantity = %d, want 1", added.Quantity)
+	if added.Item.Quantity != 1 {
+		t.Fatalf("quantity = %d, want 1", added.Item.Quantity)
 	}
 
 	// Everything else is stored as given, and reads back the same way.
-	var whole ItemView
+	var whole AddItemOutput
 	f.decode(t, "add_item", `{
 		"name":"Livella","location":"Garage","quantity":2,
 		"description":"a bolla","tags":["officina","misure"],
 		"aliases":["livella a bolla"],"notes":"presa in prestito"}`, &whole)
 	var stored ItemView
-	f.decode(t, "get_item", `{"id":`+itoa(int64(whole.ID))+`}`, &stored)
+	f.decode(t, "get_item", `{"id":`+itoa(int64(whole.Item.ID))+`}`, &stored)
 	if stored.Name != "Livella" || stored.Quantity != 2 || stored.Description != "a bolla" || stored.Notes != "presa in prestito" {
 		t.Fatalf("stored = %+v, want what was added", stored)
 	}
@@ -69,9 +69,8 @@ func TestAddItemRefusesWhatItCannotPlace(t *testing.T) {
 	if err := f.fail(t, "add_item", `{"name":"Trapano","location":"Giardino"}`); !errors.Is(err, inventory.ErrNotFound) {
 		t.Fatalf("an unknown place = %v, want ErrNotFound", err)
 	}
-	if err := f.fail(t, "add_item", `{"name":"Trapano","location":"Toolbox"}`); !errors.Is(err, inventory.ErrAmbiguous) {
-		t.Fatalf("a shared place name = %v, want ErrAmbiguous", err)
-	}
+	// A shared place name is not a failure: it comes back as a clarification
+	// to ask about, which TestAddItemClarifiesAnAmbiguousPlace covers.
 	// Punte already lives in that toolbox: adding another would overwrite it.
 	err := f.fail(t, "add_item", `{"name":"Punte","location":"Garage > Toolbox"}`)
 	if !errors.Is(err, inventory.ErrConflict) {
@@ -147,13 +146,13 @@ func TestMoveItemPutsTheDrillInTheToolbox(t *testing.T) {
 		t.Fatalf("search found %d items, want the Bosch drill", found.Count)
 	}
 
-	var moved ItemView
+	var moved MoveItemOutput
 	f.decode(t, "move_item", `{"id":`+itoa(int64(found.Results[0].ID))+`,"destination":"Garage > Toolbox"}`, &moved)
-	if moved.Location != "Garage > Toolbox" {
-		t.Fatalf("moved to %q, want the toolbox", moved.Location)
+	if moved.Item == nil || moved.Item.Location != "Garage > Toolbox" {
+		t.Fatalf("moved to %+v, want the toolbox", moved.Item)
 	}
-	if moved.Name != "Trapano" || moved.Quantity != 1 || len(moved.Tags) != 1 {
-		t.Fatalf("moved = %+v, want everything else untouched", moved)
+	if moved.Item.Name != "Trapano" || moved.Item.Quantity != 1 || len(moved.Item.Tags) != 1 {
+		t.Fatalf("moved = %+v, want everything else untouched", moved.Item)
 	}
 
 	var stored ItemView
@@ -168,15 +167,15 @@ func TestMoveItemResolvesDestinations(t *testing.T) {
 	bits := itoa(int64(f.ids["bits"]))
 
 	// A nested place, named the loose way a person types it.
-	var moved ItemView
+	var moved MoveItemOutput
 	f.decode(t, "move_item", `{"id":`+bits+`,"destination":"garage > toolbox > cassetto 1"}`, &moved)
-	if moved.Location != "Garage > Toolbox > Cassetto 1" {
-		t.Fatalf("location = %q, want the drawer", moved.Location)
+	if moved.Item == nil || moved.Item.Location != "Garage > Toolbox > Cassetto 1" {
+		t.Fatalf("location = %+v, want the drawer", moved.Item)
 	}
 	// A bare container name, when only one place carries it.
 	f.decode(t, "move_item", `{"id":`+bits+`,"destination":"Cucina"}`, &moved)
-	if moved.Location != "Cucina" {
-		t.Fatalf("location = %q, want the kitchen", moved.Location)
+	if moved.Item == nil || moved.Item.Location != "Cucina" {
+		t.Fatalf("location = %+v, want the kitchen", moved.Item)
 	}
 }
 
@@ -189,9 +188,8 @@ func TestMoveItemRefusesWhatItCannotDo(t *testing.T) {
 	if err := f.fail(t, "move_item", `{"id":`+itoa(int64(f.ids["bits"]))+`,"destination":"Giardino"}`); !errors.Is(err, inventory.ErrNotFound) {
 		t.Fatalf("an unknown place = %v, want ErrNotFound", err)
 	}
-	if err := f.fail(t, "move_item", `{"id":`+itoa(int64(f.ids["bits"]))+`,"destination":"Toolbox"}`); !errors.Is(err, inventory.ErrAmbiguous) {
-		t.Fatalf("a shared place name = %v, want ErrAmbiguous", err)
-	}
+	// A shared destination is not a failure: it comes back as a clarification
+	// to ask about, which TestMoveItemClarifiesAnAmbiguousDestination covers.
 	// The kitchen drill would land where the other drill already lives.
 	err := f.fail(t, "move_item", `{"id":`+itoa(int64(f.ids["drill in the kitchen"]))+`,"destination":"Garage > Toolbox > Cassetto 1"}`)
 	if !errors.Is(err, inventory.ErrConflict) {

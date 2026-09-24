@@ -157,6 +157,27 @@ bare name accepted when only one place carries it. A name that fits several
 places fails with the candidates listed, so a model can ask which one was
 meant instead of guessing; the same goes for an item that does not exist.
 
+### Asking instead of guessing
+
+When a name fits more than one place — two toolboxes, say — a tool never picks
+one. `add_item`, `move_item`, `list_location` and `count_items` answer with a
+`clarification` object instead of acting:
+
+```json
+{
+  "clarification": {
+    "argument": "destination",
+    "name": "Toolbox",
+    "question": "More than one place is called \"Toolbox\". Which one did you mean?",
+    "candidates": ["Garage > Toolbox", "Cucina > Toolbox"]
+  }
+}
+```
+
+The call changed nothing; repeat it with one of the full paths. The same holds
+for items: `search_inventory` returns every candidate with its location path, so
+a model asks which one was meant rather than choosing for the person.
+
 ### Deleting asks first
 
 `delete_item` deletes for good, and never silently. By default it asks:
