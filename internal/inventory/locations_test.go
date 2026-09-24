@@ -88,6 +88,31 @@ func TestLocationIndexListsChildren(t *testing.T) {
 	}
 }
 
+// TestLocationIndexDoesNotDependOnListingOrder guards a bug the tools found:
+// containers arrive ordered by name, so "Cassetto 1" comes before the
+// "Toolbox" that holds it, and the path of a container must not depend on the
+// order it was indexed in.
+func TestLocationIndexDoesNotDependOnListingOrder(t *testing.T) {
+	toolbox := ContainerID(10)
+	index := NewLocationIndex(
+		[]Room{{ID: 1, Name: "Garage"}},
+		[]Container{
+			{ID: 11, RoomID: 1, ParentID: &toolbox, Name: "Cassetto 1"},
+			{ID: 10, RoomID: 1, Name: "Toolbox"},
+		},
+	)
+
+	if got := index.Path(ContainerLocation(11)); got != "Garage > Toolbox > Cassetto 1" {
+		t.Fatalf("Path = %q, want the drawer inside the toolbox", got)
+	}
+	if got, err := index.Resolve("Garage > Toolbox > Cassetto 1"); err != nil || got != ContainerLocation(11) {
+		t.Fatalf("Resolve = %v/%v, want the drawer", got, err)
+	}
+	if got, err := index.Resolve("Cassetto 1"); err != nil || got != ContainerLocation(11) {
+		t.Fatalf("Resolve by name = %v/%v, want the drawer", got, err)
+	}
+}
+
 func TestLocationIndexListsAncestors(t *testing.T) {
 	index := testIndex()
 

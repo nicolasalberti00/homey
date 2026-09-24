@@ -369,7 +369,11 @@ func TestCountItems(t *testing.T) {
 func TestReadToolsArePlainReads(t *testing.T) {
 	f := newFixture(t)
 
-	for _, tool := range f.registry.List() {
+	for _, name := range []string{"search_inventory", "get_item", "list_location", "count_items"} {
+		tool, found := f.registry.Lookup(name)
+		if !found {
+			t.Fatalf("%s is not registered", name)
+		}
 		if tool.Permission() != PermissionRead {
 			t.Fatalf("%s needs %s, want read", tool.Name(), tool.Permission())
 		}

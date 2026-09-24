@@ -193,13 +193,15 @@ func jsonValue(payload json.RawMessage, schema *jsonschema.Schema) (any, error) 
 
 // CallerError reports whether err is a failure the caller of a tool can act
 // on: input that does not fit the schema, an entity that does not exist, a
-// name that matches several places. A transport hands these back to whoever
-// made the call instead of reporting a failure of the server.
+// name that matches several places, a write that clashes with what is already
+// stored. A transport hands these back to whoever made the call instead of
+// reporting a failure of the server.
 func CallerError(err error) bool {
 	return errors.Is(err, ErrInvalidInput) ||
 		errors.Is(err, inventory.ErrValidation) ||
 		errors.Is(err, inventory.ErrNotFound) ||
-		errors.Is(err, inventory.ErrAmbiguous)
+		errors.Is(err, inventory.ErrAmbiguous) ||
+		errors.Is(err, inventory.ErrConflict)
 }
 
 // Registry is the set of tools an adapter serves.
