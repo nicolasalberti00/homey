@@ -10,11 +10,14 @@ import (
 	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
-// fixture is a small home in a real database, with the registry of its tools
-// and the ids of the items the tests reach for.
+// fixture is a small home in a real database, with the registry of its tools,
+// the confirmer the destructive tools issue tokens through and the ids of the
+// items the tests reach for.
 type fixture struct {
-	registry *Registry
-	ids      map[string]inventory.ItemID
+	registry  *Registry
+	ids       map[string]inventory.ItemID
+	confirmer *Confirmer
+	audit     *auditLog
 }
 
 // newFixture builds a home with two rooms, a nested toolbox and two drills
@@ -88,7 +91,16 @@ func newFixture(t *testing.T) fixture {
 		ids[entry.slug] = item.ID
 	}
 
-	list, err := Inventory{Rooms: repos.Rooms, Containers: repos.Containers, Items: repos.Items}.Tools()
+	confirmer := NewConfirmer(DefaultConfirmTTL)
+	audit := &auditLog{}
+	inventory := Inventory{
+		Rooms:         repos.Rooms,
+		Containers:    repos.Containers,
+		Items:         repos.Items,
+		Confirmations: confirmer,
+		Audit:         audit.record,
+	}
+	list, err := inventory.Tools()
 	if err != nil {
 		t.Fatalf("Tools: %v", err)
 	}
@@ -96,7 +108,7 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	return fixture{registry: registry, ids: ids}
+	return fixture{registry: registry, ids: ids, confirmer: confirmer, audit: audit}
 }
 
 // call runs one tool of the registry and returns what it answered.

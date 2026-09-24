@@ -29,6 +29,9 @@ AGENTS.override.md
 # agent working state (todos, session scratch)
 .pi/
 
+# browser verification artifacts (screenshots)
+.openchamber/
+
 # macOS
 .DS_Store
 

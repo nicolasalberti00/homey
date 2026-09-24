@@ -12,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nicolasalberti00/homey/internal/auth"
 	"github.com/nicolasalberti00/homey/internal/storage"
 	mcpserver "github.com/nicolasalberti00/homey/mcp/server"
 )
@@ -25,6 +26,15 @@ const initializeRequest = `{"jsonrpc":"2.0","id":1,"method":"initialize",` +
 // and returns its URL with the Authorization header value of a write token.
 func mcpTestServer(t *testing.T) (url, authorization string) {
 	t.Helper()
+	url, _, authorization = mcpTestServerWith(t, auth.ConfirmationRequired)
+	return url, authorization
+}
+
+// mcpTestServerWith is mcpTestServer with the destructive-confirmation policy
+// of its write token and with the token store, so a test can mint more tokens
+// (a trusted one, say) against the same database.
+func mcpTestServerWith(t *testing.T, policy auth.Confirmation) (url string, tokens auth.Store, authorization string) {
+	t.Helper()
 	cfg := defaultTestConfig(t)
 	cfg.MCPEnabled = true
 	handler, db := newTestHandlerCfg(t, cfg)
@@ -32,10 +42,11 @@ func mcpTestServer(t *testing.T) (url, authorization string) {
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 
-	// makeTokenHeader returns the whole "Authorization: Bearer …" line, which
-	// is what humatest wants; a header value is what the transport sets.
-	line := makeTokenHeader(t, storage.NewTokenStore(db), "mcp test", "read,write")
-	return srv.URL, strings.TrimPrefix(line, "Authorization: ")
+	// makeTokenHeaderPolicy returns the whole "Authorization: Bearer …" line;
+	// a header value is what the transport sets.
+	store := storage.NewTokenStore(db)
+	line := makeTokenHeaderPolicy(t, store, "mcp test", "read,write", policy)
+	return srv.URL, store, strings.TrimPrefix(line, "Authorization: ")
 }
 
 // TestMCPClientConnects is the smoke test of the endpoint: a real MCP client
@@ -193,7 +204,7 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	// The tool surface is a contract with the clients.
-	want := []string{"add_item", "count_items", "get_item", "list_location", "move_item", "search_inventory", "update_item"}
+	want := []string{"add_item", "count_items", "delete_item", "get_item", "list_location", "move_item", "search_inventory", "update_item"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}
