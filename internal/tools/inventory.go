@@ -10,6 +10,11 @@ type Inventory struct {
 	Rooms      inventory.RoomRepo
 	Containers inventory.ContainerRepo
 	Items      inventory.ItemRepo
+	// Confirmations authorises destructive tools. A nil one falls back to a
+	// shared default, so an Inventory built with only the repositories works.
+	Confirmations *Confirmer
+	// Audit records destructive actions. A nil one records nothing.
+	Audit AuditFunc
 }
 
 const (
@@ -112,5 +117,21 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		return nil, err
 	}
 
-	return []Tool{searchInventory, getItem, listLocation, countItems, addItem, updateItem, moveItem}, nil
+	deleteItem, err := New(Definition[DeleteItemInput, DeleteItemOutput]{
+		Name: "delete_item",
+		Description: "Delete an item from the inventory for good; there is no undo. " +
+			"It asks first: without confirm or confirmation_token it answers with the item and a confirmation_token, and nothing is removed; " +
+			"call it again with that token to carry the deletion out. " +
+			"Pass confirm=true only when the person has already said yes to this exact deletion. " +
+			"Use it for \"butta via il trapano\" once search_inventory has given the id.",
+		Permission:           PermissionWrite,
+		Destructive:          true,
+		RequiresConfirmation: true,
+		Handler:              inv.DeleteItem,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return []Tool{searchInventory, getItem, listLocation, countItems, addItem, updateItem, moveItem, deleteItem}, nil
 }

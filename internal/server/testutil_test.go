@@ -53,6 +53,13 @@ func newTestAPI(t *testing.T) (humatest.TestAPI, testTokens) {
 
 func makeTokenHeader(t *testing.T, store auth.Store, name, scopes string) string {
 	t.Helper()
+	return makeTokenHeaderPolicy(t, store, name, scopes, auth.ConfirmationRequired)
+}
+
+// makeTokenHeaderPolicy is makeTokenHeader with an explicit
+// destructive-confirmation policy, so a test can build a trusted token.
+func makeTokenHeaderPolicy(t *testing.T, store auth.Store, name, scopes string, policy auth.Confirmation) string {
+	t.Helper()
 	plaintext, err := auth.NewToken()
 	if err != nil {
 		t.Fatalf("generating token: %v", err)
@@ -61,7 +68,7 @@ func makeTokenHeader(t *testing.T, store auth.Store, name, scopes string) string
 	if err != nil {
 		t.Fatalf("parsing scopes: %v", err)
 	}
-	if _, err := store.Create(context.Background(), name, parsed, auth.ConfirmationRequired, auth.Hash(plaintext)); err != nil {
+	if _, err := store.Create(context.Background(), name, parsed, policy, auth.Hash(plaintext)); err != nil {
 		t.Fatalf("creating token: %v", err)
 	}
 	return "Authorization: Bearer " + plaintext
