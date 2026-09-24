@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
@@ -111,18 +112,33 @@ func newFixture(t *testing.T) fixture {
 	return fixture{registry: registry, ids: ids, confirmer: confirmer, audit: audit}
 }
 
-// call runs one tool of the registry and returns what it answered.
+// call runs one tool of the registry and returns what it answered. It acts as
+// an in-process caller with the write scope, so tests exercise the tools
+// themselves; the permission tests build their own caller.
 func (f fixture) call(t *testing.T, name, input string) string {
+	t.Helper()
+	return f.callAs(t, writerContext(t), name, input)
+}
+
+// callAs runs a tool as the caller in ctx.
+func (f fixture) callAs(t *testing.T, ctx context.Context, name, input string) string {
 	t.Helper()
 	tool, found := f.registry.Lookup(name)
 	if !found {
 		t.Fatalf("%s is not registered", name)
 	}
-	output, err := tool.Call(t.Context(), json.RawMessage(input))
+	output, err := tool.Call(ctx, json.RawMessage(input))
 	if err != nil {
 		t.Fatalf("%s(%s): %v", name, input, err)
 	}
 	return string(output)
+}
+
+// writerContext is the identity the fixtures act as: an in-process caller with
+// the write scope, so a tool that changes the inventory is allowed to run.
+func writerContext(t *testing.T) context.Context {
+	t.Helper()
+	return WithCaller(t.Context(), Caller{Name: "test", CanWrite: true})
 }
 
 // TestSearchInventoryAnswersWhereThingsAre is the question the tools exist

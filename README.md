@@ -141,6 +141,16 @@ and what the code accepts cannot drift apart. Inputs and outputs are validated
 in the registry, so the same tool can be served to another adapter without
 rewriting it.
 
+### Permissions
+
+Every tool declares whether it reads or writes, and the registry enforces that
+before the handler runs: reads are open to any valid token, writes need one
+with the `write` scope. A **read-only token** (`--scope read`) is the client for
+exploration: it sees the whole tool list, but calling a write tool answers with
+a permission error and changes nothing. A context that never said who is
+calling is refused for writes too, so an adapter cannot change the inventory by
+forgetting to authenticate.
+
 Places are named the way a person names them: `"Garage"` or
 `"Garage > Toolbox > Cassetto 1"`, matched ignoring case and accents, with a
 bare name accepted when only one place carries it. A name that fits several
@@ -189,7 +199,9 @@ go run ./cmd/server token revoke <id>
 `--destructive-confirmation=bypass` marks a token that may run destructive
 tools (currently `delete_item`) without the confirmation step; the bypass is
 recorded in the audit log. Without a token the API answers `401`;
-a read-only token gets `403` on mutating operations. Repeated failed
+a read-only token gets `403` on mutating operations. The MCP endpoint answers
+the same way: a read-only token can connect and explore the inventory, but
+every write tool is refused with a permission error. Repeated failed
 authentications from one address are answered with `429` (see
 `HOMEY_RATE_LIMIT_AUTH_FAILURES`); mutating requests are rate limited the
 same way. Limits are keyed by the direct peer address — behind a reverse
