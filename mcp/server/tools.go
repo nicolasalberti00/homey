@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,9 +38,9 @@ func describe(tool tools.Tool) *mcp.Tool {
 }
 
 // handle moves JSON between the transport and the tool. A failure the caller
-// can act on — arguments that do not fit the schema — comes back as a tool
-// error, which is what the protocol asks a server to do: the model reads it and
-// tries again.
+// can act on — arguments that do not fit the schema, an entity that does not
+// exist — comes back as a tool error, which is what the protocol asks a server
+// to do: the model reads it and tries again.
 func handle(tool tools.Tool) mcp.ToolHandler {
 	return func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		arguments, err := json.Marshal(request.Params.Arguments)
@@ -50,7 +49,7 @@ func handle(tool tools.Tool) mcp.ToolHandler {
 		}
 		output, err := tool.Call(ctx, arguments)
 		if err != nil {
-			if errors.Is(err, tools.ErrInvalidInput) {
+			if tools.CallerError(err) {
 				return errorResult(err), nil
 			}
 			return nil, err

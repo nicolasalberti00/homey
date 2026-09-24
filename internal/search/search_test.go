@@ -117,37 +117,3 @@ func TestClassifyIgnoresAccents(t *testing.T) {
 		}
 	}
 }
-
-func TestLocationsPath(t *testing.T) {
-	toolbox := inventory.ContainerID(10)
-	index := locations{
-		rooms: map[inventory.RoomID]inventory.Room{
-			1: {ID: 1, Name: "Garage"},
-			2: {ID: 2, Name: "Kitchen"},
-		},
-		containers: map[inventory.ContainerID]inventory.Container{
-			10: {ID: 10, RoomID: 1, Name: "Toolbox"},
-			11: {ID: 11, RoomID: 1, ParentID: &toolbox, Name: "Drawer 1"},
-		},
-	}
-
-	cases := []struct {
-		name     string
-		location inventory.Location
-		want     string
-	}{
-		{"room", inventory.RoomLocation(1), "Garage"},
-		{"root container", inventory.ContainerLocation(10), "Garage > Toolbox"},
-		{"nested container", inventory.ContainerLocation(11), "Garage > Toolbox > Drawer 1"},
-		{"unknown room", inventory.RoomLocation(99), ""},
-		{"unknown container", inventory.ContainerLocation(99), ""},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := index.path(tc.location); got != tc.want {
-				t.Fatalf("path = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}

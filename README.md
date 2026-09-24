@@ -116,12 +116,28 @@ The endpoint sits behind the same bearer tokens as the REST API: configure the
 client with a token (`Authorization: Bearer …`), and a request without one is
 answered with `401` and a `WWW-Authenticate` challenge.
 
-The tools come from one registry: today `count_items`, with the read, write and
-delete tools arriving as they are built. Each tool is a definition plus a
-handler that calls the core, and its JSON schemas are inferred from the Go
-types it is defined with — what a client sees and what the code accepts cannot
-drift apart. Inputs and outputs are validated in the registry, so the same tool
-can be served to another adapter without rewriting it.
+The tools come from one registry, and today they are the read ones:
+
+| Tool | What it answers |
+| --- | --- |
+| `search_inventory` | where something is, by name, alias, tag or description: every candidate carries its location path, quantity and tags |
+| `get_item` | everything stored about one item, by id |
+| `list_location` | what sits directly in a room or a container; without one, the rooms of the home |
+| `count_items` | how many items match, optionally filtered by tag or place (a place counts everything inside it, containers included) |
+
+Each tool is a definition plus a handler that calls the core, and its JSON
+schemas are inferred from the Go types it is defined with — what a client sees
+and what the code accepts cannot drift apart. Inputs and outputs are validated
+in the registry, so the same tool can be served to another adapter without
+rewriting it.
+
+Places are named the way a person names them: `"Garage"` or
+`"Garage > Toolbox > Cassetto 1"`, matched ignoring case and accents, with a
+bare name accepted when only one place carries it. A name that fits several
+places fails with the candidates listed, so a model can ask which one was
+meant instead of guessing; the same goes for an item that does not exist.
+
+The write and delete tools arrive as they are built.
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/mcp \
