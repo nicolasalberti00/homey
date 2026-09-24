@@ -57,7 +57,8 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		Name: "list_location",
 		Description: "List what sits directly in a room or in a container: the containers inside it and the items in it, one level deep. " +
 			"Without a location it lists the rooms of the home, which is how to find out what the home is made of. " +
-			"Use it for \"cosa c'è in garage?\" and \"cosa c'è nel cassetto 1?\"; to find a specific item, search_inventory is quicker.",
+			"Use it for \"cosa c'è in garage?\" and \"cosa c'è nel cassetto 1?\"; to find a specific item, search_inventory is quicker. " +
+			"When the name fits several places the answer carries a clarification: ask which one, then call again with the full path.",
 		Permission: PermissionRead,
 		Handler:    inv.ListLocation,
 	})
@@ -70,7 +71,8 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		Description: "Count the items of the home inventory, optionally only those carrying a tag or only those a room or container holds, " +
 			"including everything inside its containers. " +
 			"Use it when the number is the answer (\"quanti trapani ho?\", \"quante cose ci sono in garage?\"); " +
-			"when the items themselves are wanted, use search_inventory or list_location.",
+			"when the items themselves are wanted, use search_inventory or list_location. " +
+			"When the place name fits several places the answer carries a clarification: ask which one, then call again with the full path.",
 		Permission: PermissionRead,
 		Handler:    inv.CountItems,
 	})
@@ -78,12 +80,14 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		return nil, err
 	}
 
-	addItem, err := New(Definition[AddItemInput, ItemView]{
+	addItem, err := New(Definition[AddItemInput, AddItemOutput]{
 		Name: "add_item",
 		Description: "Add an item to the home inventory, in a room or in a container that already exists. " +
 			"Use it when someone says they put something away (\"ho messo il trapano nel toolbox\") or that it should be recorded. " +
 			"The answer carries the new id, so the item can be changed or moved next. If a place with that name does not exist, " +
-			"list_location shows what there is; if an item with the same name is already there, the call fails instead of overwriting it.",
+			"list_location shows what there is; if the name fits several places the answer carries a clarification instead, " +
+			"and the item is not added until you ask and call again with the full path; if an item with the same name is already there, " +
+			"the call fails instead of overwriting it.",
 		Permission: PermissionWrite,
 		Handler:    inv.AddItem,
 	})
@@ -104,11 +108,12 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		return nil, err
 	}
 
-	moveItem, err := New(Definition[MoveItemInput, ItemView]{
+	moveItem, err := New(Definition[MoveItemInput, MoveItemOutput]{
 		Name: "move_item",
 		Description: "Move an item to another room or container, leaving everything else about it alone. " +
 			"The destination is named the way a person names it: \"Garage\" or \"Garage > Toolbox\". " +
-			"Use it for \"metti il trapano nel toolbox in garage\" once the item id is known from search_inventory.",
+			"Use it for \"metti il trapano nel toolbox in garage\" once the item id is known from search_inventory. " +
+			"When the destination name fits several places the answer carries a clarification and the item does not move: ask which one, then call again with the full path.",
 		Permission:  PermissionWrite,
 		Destructive: true,
 		Handler:     inv.MoveItem,

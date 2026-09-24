@@ -326,16 +326,20 @@ func searchResults(t *testing.T, result *mcp.CallToolResult) []map[string]any {
 }
 
 // structuredLocation reads the location out of a tool result that answers with
-// one item.
+// one item under "item".
 func structuredLocation(t *testing.T, result *mcp.CallToolResult) string {
 	t.Helper()
 	content, ok := result.StructuredContent.(map[string]any)
 	if !ok {
 		t.Fatalf("structured content = %#v, want an object", result.StructuredContent)
 	}
-	location, ok := content["location"].(string)
+	item, ok := content["item"].(map[string]any)
 	if !ok {
-		t.Fatalf("location = %#v, want a path", content["location"])
+		t.Fatalf("item = %#v, want the item the tool acted on", content["item"])
+	}
+	location, ok := item["location"].(string)
+	if !ok {
+		t.Fatalf("location = %#v, want a path", item["location"])
 	}
 	return location
 }

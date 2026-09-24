@@ -329,27 +329,13 @@ func TestListLocationWalksTheHome(t *testing.T) {
 	})
 }
 
-func TestListLocationReportsWhatItCannotResolve(t *testing.T) {
+func TestListLocationReportsAnUnknownPlace(t *testing.T) {
 	f := newFixture(t)
 	tool, _ := f.registry.Lookup("list_location")
 
 	_, err := tool.Call(t.Context(), json.RawMessage(`{"location":"Giardino"}`))
 	if !errors.Is(err, inventory.ErrNotFound) {
 		t.Fatalf("an unknown place = %v, want ErrNotFound", err)
-	}
-
-	_, err = tool.Call(t.Context(), json.RawMessage(`{"location":"Toolbox"}`))
-	if !errors.Is(err, inventory.ErrAmbiguous) {
-		t.Fatalf("a shared name = %v, want ErrAmbiguous", err)
-	}
-	// The message names the candidates, so a model can ask which one.
-	var ambiguous *inventory.AmbiguousError
-	if !errors.As(err, &ambiguous) {
-		t.Fatalf("ambiguous = %+v, want the candidates", ambiguous)
-	}
-	want := []string{"Garage > Toolbox", "Cucina > Toolbox"}
-	if !slices.Equal(ambiguous.Candidates, want) {
-		t.Fatalf("candidates = %v, want %v", ambiguous.Candidates, want)
 	}
 }
 

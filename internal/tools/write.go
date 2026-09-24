@@ -36,16 +36,34 @@ type MoveItemInput struct {
 	Destination string           `json:"destination" jsonschema:"where it goes: a room (\"Garage\") or a path (\"Garage > Toolbox\")"`
 }
 
+// AddItemOutput is what add_item answers: the new item, or a clarification when
+// the place named several and nothing was added.
+type AddItemOutput struct {
+	Item          *ItemView      `json:"item,omitempty" jsonschema:"the item as stored, id included; absent when a clarification is asked for"`
+	Clarification *Clarification `json:"clarification,omitempty" jsonschema:"set when the place was ambiguous: ask which one, then call again with a full path"`
+}
+
+// MoveItemOutput is what move_item answers: the moved item, or a clarification
+// when the destination named several and the item did not move.
+type MoveItemOutput struct {
+	Item          *ItemView      `json:"item,omitempty" jsonschema:"the item as stored after the move; absent when a clarification is asked for"`
+	Clarification *Clarification `json:"clarification,omitempty" jsonschema:"set when the destination was ambiguous: ask which one, then call again with a full path"`
+}
+
 // AddItem puts a new item in a place that already exists, and answers with the
-// item as stored, id included, so a caller can move or change it next.
-func (inv Inventory) AddItem(ctx context.Context, input AddItemInput) (ItemView, error) {
+// item as stored, id included, so a caller can move or change it next. When the
+// place named several it asks which one instead of guessing.
+func (inv Inventory) AddItem(ctx context.Context, input AddItemInput) (AddItemOutput, error) {
 	index, err := inv.locationIndex(ctx)
 	if err != nil {
-		return ItemView{}, err
+		return AddItemOutput{}, err
 	}
 	location, err := index.Resolve(input.Location)
 	if err != nil {
-		return ItemView{}, err
+		if clarification, ok := clarify("location", input.Location, err); ok {
+			return AddItemOutput{Clarification: clarification}, nil
+		}
+		return AddItemOutput{}, err
 	}
 
 	quantity := input.Quantity
@@ -62,9 +80,10 @@ func (inv Inventory) AddItem(ctx context.Context, input AddItemInput) (ItemView,
 		Location:    location,
 	}
 	if err := inv.Items.Create(ctx, &item); err != nil {
-		return ItemView{}, err
+		return AddItemOutput{}, err
 	}
-	return itemView(item, index.Path(item.Location)), nil
+	view := itemView(item, index.Path(item.Location))
+	return AddItemOutput{Item: &view}, nil
 }
 
 // UpdateItem changes the fields that were given and leaves the others alone.
@@ -105,25 +124,30 @@ func (inv Inventory) UpdateItem(ctx context.Context, input UpdateItemInput) (Ite
 
 // MoveItem puts an item in another place without touching anything else. The
 // destination is a room or a path such as "Garage > Toolbox", resolved the way
-// a person names it.
-func (inv Inventory) MoveItem(ctx context.Context, input MoveItemInput) (ItemView, error) {
+// a person names it. When the destination named several places it asks which
+// one instead of guessing.
+func (inv Inventory) MoveItem(ctx context.Context, input MoveItemInput) (MoveItemOutput, error) {
 	index, err := inv.locationIndex(ctx)
 	if err != nil {
-		return ItemView{}, err
+		return MoveItemOutput{}, err
 	}
 	destination, err := index.Resolve(input.Destination)
 	if err != nil {
-		return ItemView{}, err
+		if clarification, ok := clarify("destination", input.Destination, err); ok {
+			return MoveItemOutput{Clarification: clarification}, nil
+		}
+		return MoveItemOutput{}, err
 	}
 	if err := inv.Items.Move(ctx, input.ID, destination); err != nil {
-		return ItemView{}, err
+		return MoveItemOutput{}, err
 	}
 
 	// Read the item back, so the answer is what storage holds rather than
 	// what the move was asked to do.
 	item, err := inv.Items.Get(ctx, input.ID)
 	if err != nil {
-		return ItemView{}, err
+		return MoveItemOutput{}, err
 	}
-	return itemView(item, index.Path(item.Location)), nil
+	view := itemView(item, index.Path(item.Location))
+	return MoveItemOutput{Item: &view}, nil
 }

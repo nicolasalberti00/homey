@@ -74,6 +74,9 @@ type CountItemsInput struct {
 // CountItemsOutput is what count_items answers.
 type CountItemsOutput struct {
 	Count int `json:"count" jsonschema:"how many items matched"`
+	// Clarification is set when the place named several and the count cannot
+	// be taken; Count is then zero and means nothing.
+	Clarification *Clarification `json:"clarification,omitempty" jsonschema:"set when the place was ambiguous: ask which one, then call again"`
 }
 
 // GetItemInput is what get_item takes.
@@ -89,10 +92,13 @@ type ListLocationInput struct {
 // ListLocationOutput is what list_location answers: what sits directly in one
 // place.
 type ListLocationOutput struct {
-	Location   string         `json:"location" jsonschema:"the place that was listed, as a path; \"Home\" when none was given"`
+	Location   string         `json:"location,omitempty" jsonschema:"the place that was listed, as a path; \"Home\" when none was given"`
 	Rooms      []RoomView     `json:"rooms,omitempty" jsonschema:"the rooms of the home, when no place was given"`
 	Containers []LocationView `json:"containers,omitempty" jsonschema:"the containers directly inside the place"`
 	Items      []ItemView     `json:"items,omitempty" jsonschema:"the items directly inside the place"`
+	// Clarification is set when the place named several and nothing can be
+	// listed yet.
+	Clarification *Clarification `json:"clarification,omitempty" jsonschema:"set when the place was ambiguous: ask which one, then call again"`
 }
 
 // SearchInventory looks for items by name, alias, tag or description and
@@ -166,6 +172,9 @@ func (inv Inventory) ListLocation(ctx context.Context, input ListLocationInput) 
 	}
 	location, err := index.Resolve(input.Location)
 	if err != nil {
+		if clarification, ok := clarify("location", input.Location, err); ok {
+			return ListLocationOutput{Clarification: clarification}, nil
+		}
 		return ListLocationOutput{}, err
 	}
 	items, err := inv.Items.ListByLocation(ctx, location)
@@ -198,6 +207,9 @@ func (inv Inventory) ListLocation(ctx context.Context, input ListLocationInput) 
 func (inv Inventory) CountItems(ctx context.Context, input CountItemsInput) (CountItemsOutput, error) {
 	items, err := inv.candidates(ctx, input.Location)
 	if err != nil {
+		if clarification, ok := clarify("location", input.Location, err); ok {
+			return CountItemsOutput{Clarification: clarification}, nil
+		}
 		return CountItemsOutput{}, err
 	}
 	if input.Tag == "" {
