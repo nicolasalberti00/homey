@@ -146,13 +146,30 @@ request headers are supported for organization connectors in beta; a personal
 connector only offers OAuth, which homey does not implement. For a home
 server, prefer Claude Desktop with the `mcp-remote` bridge above.
 
-### ChatGPT
+### ChatGPT and Codex
 
-ChatGPT's custom connectors (Developer Mode, web only) accept **OAuth or no
-authentication — no static bearer header**, so a token-protected homey cannot
-be added directly today; "no authentication" would leave the header out and
-homey answers `401`. Use a client that can carry the header (Cursor, Claude
-Code, Claude Desktop, Codex).
+Two different surfaces, two different answers.
+
+**Codex — CLI, IDE extension and the ChatGPT desktop app** — share one
+configuration file and a Streamable HTTP server there carries the token
+(`~/.codex/config.toml`, or `.codex/config.toml` for a trusted project):
+
+```toml
+[mcp_servers.homey]
+url = "http://127.0.0.1:8080/mcp"
+bearer_token_env_var = "HOMEY_TOKEN"
+```
+
+`HOMEY_TOKEN` is read from the environment Codex starts in; the literal form
+works too — `http_headers = { "Authorization" = "Bearer YOUR_TOKEN" }`. All
+three clients read the same file, so one entry serves them.
+
+**ChatGPT on the web** takes custom connectors (Developer Mode, web only) as
+**OAuth or no authentication, and nothing else**: its own documentation says
+the client "cannot present custom API keys", and the tool security schemes it
+accepts are `noauth` and `oauth2`. A token-protected homey has neither, so
+`no authentication` would leave the header out and homey answers `401`.
+There is no recipe that works there today — use one of the clients above.
 
 ### Ollama
 
