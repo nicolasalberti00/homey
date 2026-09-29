@@ -15,6 +15,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/nicolasalberti00/homey/internal/auth"
+	"github.com/nicolasalberti00/homey/internal/events"
 )
 
 // bearerAuth returns a Huma middleware that authenticates the request: read
@@ -41,7 +42,9 @@ func bearerAuth(tokens auth.Store, logger *slog.Logger) func(huma.Context, func(
 				"this token only grants read access; use a token with the write scope")
 			return
 		}
-		next(ctx)
+		// The storage layer writes the event log next to the mutation, so the
+		// identity behind it travels in the context.
+		next(huma.WithValue(ctx, events.ActorKey{}, events.Actor{Name: token.Name}))
 	}
 }
 

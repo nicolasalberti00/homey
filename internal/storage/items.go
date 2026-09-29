@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
@@ -56,7 +57,7 @@ SET room_id = ?,
 WHERE id = ?
 RETURNING id, room_id, container_id, name, description, quantity, notes, created_at, updated_at`
 
-	deleteItemSQL = `DELETE FROM items WHERE id = ? RETURNING id`
+	deleteItemSQL = `DELETE FROM items WHERE id = ?`
 
 	moveItemSQL = `
 UPDATE items
@@ -65,6 +66,11 @@ SET room_id = ?,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 WHERE id = ?
 RETURNING id`
+
+	itemLocationSQL = `
+SELECT room_id, container_id
+FROM items
+WHERE id = ?`
 
 	insertItemTagSQL = `INSERT INTO item_tags (item_id, tag) VALUES (?, ?)`
 
@@ -186,7 +192,10 @@ func (r *itemRepo) Create(ctx context.Context, item *inventory.Item) error {
 		if err := loadItemTags(ctx, tx, item); err != nil {
 			return err
 		}
-		return loadItemAliases(ctx, tx, item)
+		if err := loadItemAliases(ctx, tx, item); err != nil {
+			return err
+		}
+		return record(ctx, tx, events.ItemCreated, events.EntityItem, int64(item.ID), itemEvent(*item))
 	})
 }
 
@@ -274,7 +283,10 @@ func (r *itemRepo) Update(ctx context.Context, item *inventory.Item) error {
 		if err := loadItemTags(ctx, tx, item); err != nil {
 			return err
 		}
-		return loadItemAliases(ctx, tx, item)
+		if err := loadItemAliases(ctx, tx, item); err != nil {
+			return err
+		}
+		return record(ctx, tx, events.ItemUpdated, events.EntityItem, int64(item.ID), itemEvent(*item))
 	})
 }
 
@@ -286,6 +298,13 @@ func (r *itemRepo) Move(ctx context.Context, id inventory.ItemID, destination in
 	return withTx(ctx, r.db, func(tx *sql.Tx) error {
 		if err := requireLocation(ctx, tx, destination); err != nil {
 			return err
+		}
+		var room, container sql.NullInt64
+		if err := tx.QueryRowContext(ctx, itemLocationSQL, id).Scan(&room, &container); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return notFound("item", int64(id))
+			}
+			return fmt.Errorf("loading the location of item %d: %w", id, err)
 		}
 		roomID, containerID := locationColumns(destination)
 		var moved int64
@@ -299,21 +318,52 @@ func (r *itemRepo) Move(ctx context.Context, id inventory.ItemID, destination in
 			}
 			return fmt.Errorf("moving item %d: %w", id, err)
 		}
-		return nil
+		origin, err := itemOrigin(room, container, id)
+		if err != nil {
+			return err
+		}
+		return record(ctx, tx, events.ItemMoved, events.EntityItem, int64(id), moveEvent(origin, destination))
 	})
+}
+
+// itemOrigin rebuilds the location an item row pointed at, for the from side of
+// a move event.
+func itemOrigin(room, container sql.NullInt64, id inventory.ItemID) (inventory.Location, error) {
+	switch {
+	case room.Valid:
+		return inventory.RoomLocation(inventory.RoomID(room.Int64)), nil
+	case container.Valid:
+		return inventory.ContainerLocation(inventory.ContainerID(container.Int64)), nil
+	default:
+		return inventory.Location{}, fmt.Errorf("item %d has no location", id)
+	}
 }
 
 // Delete implements inventory.ItemRepo.
 func (r *itemRepo) Delete(ctx context.Context, id inventory.ItemID) error {
-	var deleted inventory.ItemID
-	err := r.db.QueryRowContext(ctx, deleteItemSQL, id).Scan(&deleted)
-	if errors.Is(err, sql.ErrNoRows) {
-		return notFound("item", int64(id))
-	}
-	if err != nil {
-		return fmt.Errorf("deleting item %d: %w", id, err)
-	}
-	return nil
+	return withTx(ctx, r.db, func(tx *sql.Tx) error {
+		// Read the item first: the event carries what was there, tags and
+		// aliases included, because the row is gone after this and a replay
+		// has nothing else to read.
+		var deleted inventory.Item
+		err := scanItem(tx.QueryRowContext(ctx, getItemSQL, id), &deleted)
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("item", int64(id))
+		}
+		if err != nil {
+			return fmt.Errorf("loading item %d: %w", id, err)
+		}
+		if err := loadItemTags(ctx, tx, &deleted); err != nil {
+			return err
+		}
+		if err := loadItemAliases(ctx, tx, &deleted); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, deleteItemSQL, id); err != nil {
+			return fmt.Errorf("deleting item %d: %w", id, err)
+		}
+		return record(ctx, tx, events.ItemDeleted, events.EntityItem, int64(id), itemEvent(deleted))
+	})
 }
 
 // requireLocation fails with ErrNotFound when the referenced room or

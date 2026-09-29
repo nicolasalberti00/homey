@@ -13,8 +13,6 @@ type Inventory struct {
 	// Confirmations authorises destructive tools. A nil one falls back to a
 	// shared default, so an Inventory built with only the repositories works.
 	Confirmations *Confirmer
-	// Audit records destructive actions. A nil one records nothing.
-	Audit AuditFunc
 }
 
 const (

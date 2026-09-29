@@ -5,10 +5,10 @@ room and location, manage them from a Web UI and interact with them through
 LLMs via MCP. No cloud account, no external database, no mandatory AI
 provider.
 
-> **Status: Phase 6 (MCP) in progress.** The REST API, Web UI and search are
-> complete, and the MCP endpoint serves read and write tools — including
-> deletion guarded by a confirmation step and an explicit, audited bypass.
-> Remaining: MCP permissions, ambiguity handling, hardening (Phase 7).
+> **Status: Phase 7 (hardening) in progress.** The REST API, Web UI, search
+> and MCP are complete — including confirmed deletion and explicit, audited
+> bypasses — and every mutation now writes to the event log. Remaining: the
+> event surface, security review, backup/export/import, docs (Phase 7).
 
 ## Quickstart (Docker)
 
@@ -203,6 +203,27 @@ curl -sS -X POST http://127.0.0.1:8080/mcp \
         "protocolVersion":"2025-06-18","capabilities":{},
         "clientInfo":{"name":"curl","version":"0"}}}'
 ```
+
+## Events
+
+Every mutation writes a row to the `events` table **in the same transaction as
+the change it describes**, so the history is complete by construction:
+`room.created`, `container.created|updated|deleted|moved` and
+`item.created|updated|deleted|moved`, each with the entity, its state as JSON
+and when it happened. Nothing mutates without leaving a trace, and a mutation
+that failed leaves nothing behind.
+
+The actor travels with it. The REST middleware stamps the token's name; the MCP
+tool registry stamps the tool on top of it, so a row written through MCP carries
+`tool="delete_item"`, the name of the token, and — when the tool had to ask —
+`confirmation="confirmed"` or `confirmation="bypassed"`. That is the audit of
+the LLM actions: *"who deleted this, with which tool, and was it confirmed?"*
+is answered by the table alone.
+
+The state in `payload` is what a future undo needs: `created` and `updated`
+carry the entity as it now stands, `deleted` the entity as it was, and `moved`
+the two places. Today the log is read from Go (`events.Recent` and
+`events.ForEntity`); a history surface over REST and MCP is a later step.
 
 ## API tokens
 

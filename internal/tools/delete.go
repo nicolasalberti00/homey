@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
@@ -62,12 +63,13 @@ func (inv Inventory) DeleteItem(ctx context.Context, input DeleteItemInput) (Del
 
 	switch {
 	case input.Confirm || caller.BypassConfirmation:
-		if err := inv.Items.Delete(ctx, input.ID); err != nil {
+		// The storage layer writes the event, so the caller and the way the
+		// step was authorised travel in the context next to it.
+		if err := inv.Items.Delete(events.WithActor(ctx, events.Actor{
+			Name: caller.Name, Tool: deleteItemTool, Confirmation: confirmationBypassed,
+		}), input.ID); err != nil {
 			return DeleteItemOutput{}, err
 		}
-		inv.record(ctx, AuditEvent{
-			Tool: deleteItemTool, ItemID: input.ID, Caller: caller.Name, Confirmation: confirmationBypassed,
-		})
 		return DeleteItemOutput{Deleted: true, Item: view, Confirmation: confirmationBypassed}, nil
 
 	case input.ConfirmationToken != "":
@@ -76,12 +78,11 @@ func (inv Inventory) DeleteItem(ctx context.Context, input DeleteItemInput) (Del
 				"%w: the token is not valid for deleting item %d; it may have expired, been used, or belong to another action. Call delete_item again without a token for a fresh one",
 				ErrConfirmation, input.ID)
 		}
-		if err := inv.Items.Delete(ctx, input.ID); err != nil {
+		if err := inv.Items.Delete(events.WithActor(ctx, events.Actor{
+			Name: caller.Name, Tool: deleteItemTool, Confirmation: confirmationConfirmed,
+		}), input.ID); err != nil {
 			return DeleteItemOutput{}, err
 		}
-		inv.record(ctx, AuditEvent{
-			Tool: deleteItemTool, ItemID: input.ID, Caller: caller.Name, Confirmation: confirmationConfirmed,
-		})
 		return DeleteItemOutput{Deleted: true, Item: view, Confirmation: confirmationConfirmed}, nil
 
 	default:
@@ -106,11 +107,4 @@ func (inv Inventory) confirmer() *Confirmer {
 		return inv.Confirmations
 	}
 	return defaultConfirmer
-}
-
-// record notes a destructive action when an audit function is wired.
-func (inv Inventory) record(ctx context.Context, event AuditEvent) {
-	if inv.Audit != nil {
-		inv.Audit(ctx, event)
-	}
 }
