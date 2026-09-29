@@ -61,6 +61,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the whole inventory
+         * @description Every room, container and item, named rather than numbered: a room by its name, a container by its name inside its room, an item by its name at its place. The document carries no ids, so the same file restores a fresh instance and merges into a populated one. Requires the read scope.
+         */
+        get: operations["export-inventory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import a document
+         * @description Applies a document produced by export-inventory. Every entry is matched by name within its scope, so importing twice leaves the same inventory, and a document that is missing an entity never deletes one. The whole document is validated before anything is written, and a problem points at the entry it came from. Requires the write scope.
+         */
+        post: operations["import-inventory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items": {
         parameters: {
             query?: never;
@@ -182,6 +222,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Container: {
+            /** @description Optional description of the container. */
+            description?: string;
+            /** @description Name of the container, unique within its room. */
+            name: string;
+            /** @description Name of the container it hangs from, inside the same room. */
+            parent?: string;
+            /** @description Name of the room the container is in. */
+            room: string;
+        };
         ContainerDetail: {
             /** Format: date-time */
             created_at: string;
@@ -260,6 +310,27 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        Counts: {
+            /** Format: int64 */
+            created: number;
+            /** Format: int64 */
+            unchanged: number;
+            /** Format: int64 */
+            updated: number;
+        };
+        Document: {
+            /** @description Containers, parents before children; absent when there are none. */
+            containers?: components["schemas"]["Container"][] | null;
+            /** Format: date-time */
+            exported_at?: string;
+            format: string;
+            /** @description Items, each naming its place; absent when there are none. */
+            items?: components["schemas"]["Item"][] | null;
+            /** @description Rooms of the inventory, by name; absent when there are none. */
+            rooms?: components["schemas"]["Room"][] | null;
+            /** Format: int64 */
+            version: number;
+        };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
             location?: string;
@@ -300,6 +371,25 @@ export interface components {
              * @example https://example.com/errors/example
              */
             type: string;
+        };
+        Item: {
+            /** @description Other names the item answers to. */
+            aliases?: string[] | null;
+            /** @description Optional description of the item. */
+            description?: string;
+            /** @description Where the item lives. */
+            location: components["schemas"]["Location"];
+            /** @description Name of the item, unique within its location. */
+            name: string;
+            /** @description Optional free-form notes. */
+            notes?: string;
+            /**
+             * Format: int64
+             * @description How many of the item exist; zero means none left.
+             */
+            quantity: number;
+            /** @description Free-form labels, unique within the item. */
+            tags?: string[] | null;
         };
         ItemInput: {
             /** @description Other names the item answers to, searched like its name. */
@@ -364,6 +454,17 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        Location: {
+            /** @description Name of the container, when kind is container. */
+            container?: string;
+            /**
+             * @description Whether the location is a room or a container.
+             * @enum {string}
+             */
+            kind: "room" | "container";
+            /** @description Name of the room. */
+            room: string;
+        };
         LocationRef: {
             /**
              * Format: int64
@@ -379,6 +480,17 @@ export interface components {
         MoveBody: {
             /** @description Where to move the entity. */
             destination: components["schemas"]["LocationRef"];
+        };
+        Report: {
+            containers: components["schemas"]["Counts"];
+            items: components["schemas"]["Counts"];
+            rooms: components["schemas"]["Counts"];
+        };
+        Room: {
+            /** @description Optional description of the room. */
+            description?: string;
+            /** @description Name of the room, unique across the inventory. */
+            name: string;
         };
         RoomInput: {
             /** @description Optional description of the room. */
@@ -630,6 +742,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContainerDetail"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "export-inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "import-inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Document"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
                 };
             };
             /** @description Error */
