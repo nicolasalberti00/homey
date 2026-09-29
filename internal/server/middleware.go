@@ -1,11 +1,14 @@
 package server
 
-// Transport hardening for the API surface (roadmap Step 3.6):
+// Transport hardening for the API surface (roadmap Steps 3.6 and 7.2):
 //
 //   - securityHeaders adds defensive headers to every response;
 //   - cors answers preflights and tags responses for configured origins,
 //     staying silent (same-origin only) by default;
-//   - rateLimit caps mutating requests per client IP;
+//   - rateLimit caps mutating requests per client IP, over the API and the
+//     MCP endpoint alike;
+//   - bodyLimit keeps a request body from filling memory before validation
+//     ever runs;
 //   - authFailureLimit blocks client IPs that keep failing authentication.
 //
 // All limits are in-memory fixed windows: homey is a single-node, self-hosted
@@ -15,6 +18,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -64,15 +68,18 @@ func cors(allowedOrigins []string, next http.Handler) http.Handler {
 	})
 }
 
-// rateLimit caps mutating /api/v1 requests per client IP with 429 and a
-// Retry-After header. A limit of 0 disables it.
+// rateLimit caps mutating requests per client IP with 429 and a
+// Retry-After header. It counts the API writes and the MCP endpoint alike:
+// /mcp is where an agent drives mutations through, and the endpoint cannot
+// tell a read from a write without parsing the stream, so every POST to it
+// counts. A limit of 0 disables it.
 func rateLimit(perMinute int, next http.Handler) http.Handler {
 	if perMinute <= 0 {
 		return next
 	}
 	writes := newFixedWindow(time.Minute, perMinute)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isWriteMethod(r.Method) || !strings.HasPrefix(r.URL.Path, "/api/v1/") {
+		if !isWriteMethod(r.Method) || !countsTowardWriteLimit(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -83,6 +90,12 @@ func rateLimit(perMinute int, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// countsTowardWriteLimit reports whether a request on path mutates: the API
+// operations all live under /api/v1/, and the MCP endpoint is mounted at /mcp.
+func countsTowardWriteLimit(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/") || path == "/mcp"
 }
 
 // authFailureLimit blocks client IPs whose failed authentications exceeded
@@ -119,6 +132,28 @@ func writeProblem(w http.ResponseWriter, status int, detail string) {
 		"title":  http.StatusText(status),
 		"status": status,
 		"detail": detail,
+	})
+}
+
+// maxRequestBodyBytes caps how much of a request body is read. An item is a
+// few kilobytes and the largest operation today is a page of search results,
+// so 4 MiB is room to grow while keeping a client from filling memory before
+// validation ever sees its input (Step 7.2 security review).
+const maxRequestBodyBytes int64 = 4 << 20
+
+// bodyLimit refuses bodies over the cap: the announced length is rejected
+// outright, and a body that grows past the cap while streaming is cut by
+// MaxBytesReader wherever the reader happens to notice. Reading is bounded
+// either way, so a flood cannot cost more than the cap.
+func bodyLimit(maxBytes int64, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ContentLength > maxBytes {
+			writeProblem(w, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("request body exceeds %d bytes", maxBytes))
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+		next.ServeHTTP(w, r)
 	})
 }
 

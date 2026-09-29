@@ -41,6 +41,12 @@ var registerFold = sync.OnceFunc(func() {
 // SQLite is configured with WAL journaling, foreign key enforcement and a
 // busy timeout, which are the sane defaults for a single-node self-hosted
 // deployment.
+//
+// The file is created here, before SQLite gets to it: the inventory and the
+// token hashes would otherwise take the default umask and be readable by every
+// account on the host. A file that already exists keeps the mode it has, so an
+// operator who widened it for a backup tool is not silently overruled (Step
+// 7.2 security review).
 func Open(path string) (*sql.DB, error) {
 	if path == "" {
 		return nil, fmt.Errorf("database path must not be empty")
@@ -49,6 +55,13 @@ func Open(path string) (*sql.DB, error) {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nil, fmt.Errorf("creating database directory: %w", err)
 		}
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("creating database file: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return nil, fmt.Errorf("closing database file: %w", err)
 	}
 	registerFold()
 	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
