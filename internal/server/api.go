@@ -59,6 +59,7 @@ func registerOperations(api huma.API, deps Deps) {
 	RegisterContainers(api, deps)
 	RegisterItems(api, deps)
 	RegisterSearch(api, deps)
+	RegisterBackup(api, deps)
 }
 
 // apiConfig builds the Huma configuration. Both the real server and the
@@ -66,7 +67,7 @@ func registerOperations(api huma.API, deps Deps) {
 // and response behavior as production.
 func apiConfig() huma.Config {
 	cfg := huma.DefaultConfig("homey API", apiVersion)
-	cfg.Info.Description = "REST API for homey, the self-hosted home inventory: rooms, nested containers, items and moves. All operations require a bearer token except this document, the docs UI and the schemas."
+	cfg.Info.Description = "REST API for homey, the self-hosted home inventory: rooms, nested containers, items, moves, search and the backup document. All operations require a bearer token except this document, the docs UI and the schemas."
 	cfg.OpenAPIPath = "/openapi"
 	cfg.DocsPath = "/docs"
 	cfg.Servers = []*huma.Server{{URL: "/api/v1", Description: "Versioned API root"}}

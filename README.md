@@ -7,8 +7,9 @@ provider.
 
 > **Status: Phase 7 (hardening) in progress.** The REST API, Web UI, search
 > and MCP are complete — including confirmed deletion and explicit, audited
-> bypasses — and every mutation now writes to the event log. Remaining: the
-> event surface, security review, backup/export/import, docs (Phase 7).
+> bypasses — every mutation writes to the event log, the security review is
+> documented with its findings closed, and the inventory exports to and
+> imports from a JSON document. Remaining: documentation (Phase 7).
 
 ## Quickstart (Docker)
 
@@ -65,6 +66,8 @@ contract in [`api/openapi.yaml`](api/openapi.yaml):
 - Search — `GET /api/v1/search?q=…` matches every term against item names,
   descriptions, aliases and tags, and returns the candidates best match first,
   each with the path of its location
+- Backup — `GET /api/v1/export` writes the whole inventory as a document,
+  `POST /api/v1/import` applies one (see [Backup](#backup))
 - Public — `GET /api/v1/openapi.json` and `GET /api/v1/docs` (Stoplight docs UI)
 
 Every response carries defensive security headers (`nosniff`, frame deny,
@@ -248,6 +251,57 @@ authentications from one address are answered with `429` (see
 `HOMEY_RATE_LIMIT_AUTH_FAILURES`); mutating requests are rate limited the
 same way. Limits are keyed by the direct peer address — behind a reverse
 proxy they apply to the proxy, so tune them accordingly.
+
+## Backup
+
+Two ways to keep the inventory safe, and they answer different questions: a
+copy of the database restores *exactly* what was there, an export restores
+*what it means* on any instance.
+
+**Copy the file.** The database is `data/homey.db` (see Configuration) with
+its `-wal` and `-shm` beside it. While the server runs, copy it with SQLite's
+own command rather than `cp`, so the write-ahead log is folded in:
+
+```bash
+sqlite3 data/homey.db ".backup backup/homey-$(date +%F).db"
+```
+
+With the server stopped, `cp data/homey.db backup/` is enough: a clean
+shutdown checkpoints the log away. The file is `0600`; keep it that way.
+
+**Export the document.** `GET /export` writes the whole inventory as JSON —
+rooms, containers (parents first), items with their tags, aliases and places —
+naming everything instead of numbering it, so the same file means the same
+thing on any instance:
+
+```bash
+curl -H "Authorization: Bearer $HOMEY_TOKEN" http://127.0.0.1:8080/api/v1/export > homey.json
+```
+
+**Import it back.** `POST /import` applies a document, and it is built to be
+run more than once:
+
+- the whole document is validated **before anything is written**, and a
+  problem points at the entry it came from (`body.items[3].quantity`);
+- every entity is matched **by name within its scope** — the same scope the
+  uniqueness rules use — so a second import of the same document reports
+  everything `unchanged` and writes nothing;
+- entities are **never deleted**: a document that does not mention an
+  instance's item leaves it alone. What it does mention is authoritative.
+
+```bash
+curl -X POST -H "Authorization: Bearer $HOMEY_TOKEN" -H "Content-Type: application/json" \
+  --data @homey.json http://127.0.0.1:8080/api/v1/import
+```
+
+The answer counts what happened per kind of entity: `created`, `updated` and
+`unchanged`. Importing into a fresh instance creates everything; importing
+into the one the document came from changes nothing. Both go through the
+event log like any other mutation, and both need the **write** scope (export
+needs **read**).
+
+The document is deliberately **not** an MCP tool: a language model neither
+needs a dump of the whole inventory nor a bulk way to rewrite it.
 
 ## Web UI (development)
 
