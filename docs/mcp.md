@@ -191,6 +191,25 @@ The model needs tool calling (a 14B+ model such as Qwen 3 or Llama 3.3 is the
 practical floor). Kit's own `type: remote` cannot attach a static header yet,
 which is why the example goes through the bridge.
 
+### OpenChamber (OpenCode)
+
+OpenCode attaches a remote server directly and the tools show up in sessions:
+
+```bash
+opencode mcp add homey --url http://127.0.0.1:8080/mcp \
+  --header "Authorization=Bearer YOUR_TOKEN"
+opencode mcp list          # name, status
+```
+
+`--global` writes the server to the global configuration instead of the
+current project's, and `/mcps` in the TUI shows the same list with a sign-in
+flow for servers that use OAuth (homey uses the header, so there is none).
+
+A server registered for one directory is visible only to sessions in that
+directory: a session opened elsewhere lists the rest of the catalog but not
+homey's tools. That is the first thing to check when a server says
+`connected` and the tools are still missing.
+
 ## Checking it works
 
 ```bash
@@ -213,5 +232,6 @@ Then `tools/list` returns the eight tools and `tools/call` runs one.
 | `403` / permission error on a write tool | read-only token, or a request with no caller |
 | `404` on `/mcp` | MCP is switched off (`HOMEY_MCP_ENABLED=false`) |
 | `429` with `Retry-After` | rate limited: `POST /mcp` counts against `HOMEY_RATE_LIMIT_WRITES`, repeated `401`s against `HOMEY_RATE_LIMIT_AUTH_FAILURES` |
+| The server says `connected` but the tools are missing | it is registered for another directory; add it with `--global` or for the session's project |
 | The client connects but the tools do nothing | the model's tool calling is switched off or too weak |
 | A write tool answers with `clarification` | the name fits several places; answer with the full path |
