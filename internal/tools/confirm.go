@@ -112,7 +112,8 @@ func (c *Confirmer) dropExpiredLocked() {
 
 // Caller is who a tool is running for. The transport that authenticated the
 // request puts it in the context, so a tool can honour the caller's permissions
-// and policies without knowing anything about tokens or HTTP.
+// and policies without knowing anything about tokens or HTTP. Its Name is what
+// the event log records as the actor of every mutation the tool carries out.
 type Caller struct {
 	// Name identifies the caller in the audit trail.
 	Name string
@@ -138,16 +139,8 @@ func CallerFrom(ctx context.Context) (Caller, bool) {
 	return caller, found
 }
 
-// AuditEvent records one destructive action that happened, in the shape an
-// audit trail needs: which tool ran, on what, for whom, and how the
-// confirmation step was resolved.
-type AuditEvent struct {
-	Tool         string
-	ItemID       inventory.ItemID
-	Caller       string
-	Confirmation string
-}
+// AuditFunc has moved out: the audit trail lives in the events table the
+// storage layer writes, and the tool only says who is calling.
 
-// AuditFunc receives an audit event. A nil AuditFunc records nothing; the
-// server wires one, and Phase 7 routes the same events into the audit table.
-type AuditFunc func(ctx context.Context, event AuditEvent)
+// AuditEvent is gone with it. See internal/events for the shape of a recorded
+// action, and the caller for who a tool runs for.

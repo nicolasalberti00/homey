@@ -4,11 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
+
+// eventTypes collects the types of an event history, in the order they were
+// read.
+func eventTypes(history []events.Event) []string {
+	got := make([]string, len(history))
+	for index, event := range history {
+		got[index] = event.Type
+	}
+	return got
+}
 
 // deleteAs runs delete_item with the given context: the caller identity travels
 // there, so the bypass tests can pretend to be a trusted token.
@@ -94,12 +106,19 @@ func TestDeleteItemCarriesOutAConfirmedDeletion(t *testing.T) {
 		t.Fatalf("reading the deleted item = %v, want ErrNotFound", err)
 	}
 	// And the deletion is on the audit trail, authorised by confirmation.
-	events := f.audit.all()
-	if len(events) != 1 {
-		t.Fatalf("audit recorded %d events, want one", len(events))
+	story := f.story(t, t.Context(), events.EntityItem, int64(f.ids["moka"]))
+	if got := eventTypes(story); !slices.Contains(got, events.ItemDeleted) {
+		t.Fatalf("event types = %v, want the deletion recorded", got)
 	}
-	if events[0].Tool != "delete_item" || events[0].Confirmation != "confirmed" {
-		t.Fatalf("audit event = %+v, want a confirmed delete", events[0])
+	last := story[len(story)-1]
+	if last.Type != events.ItemDeleted {
+		t.Fatalf("last event = %+v, want the deletion", last)
+	}
+	if last.Tool != "delete_item" || last.Confirmation != "confirmed" {
+		t.Fatalf("event = %+v, want a confirmed delete", last)
+	}
+	if last.Actor != "test" {
+		t.Fatalf("event = %+v, want the caller recorded as the actor", last)
 	}
 }
 
@@ -138,9 +157,12 @@ func TestDeleteItemRefusesAnUnusableConfirmation(t *testing.T) {
 		var stored ItemView
 		f.decode(t, "get_item", `{"id":`+id+`}`, &stored)
 	}
-	// Refused confirmations are not deletions, so they leave no audit event.
-	if events := f.audit.all(); len(events) != 0 {
-		t.Fatalf("audit recorded %+v, want nothing for refused confirmations", events)
+	// Refused confirmations are not deletions, so they leave no event.
+	for _, id := range []inventory.ItemID{f.ids["bits"], f.ids["moka"]} {
+		story := f.story(t, t.Context(), events.EntityItem, int64(id))
+		if got := eventTypes(story); slices.Contains(got, events.ItemDeleted) {
+			t.Fatalf("event types of item %d = %v, want nothing for refused confirmations", id, got)
+		}
 	}
 }
 
@@ -164,9 +186,11 @@ func TestDeleteItemBypassesWithConfirm(t *testing.T) {
 		t.Fatal("a bypass handed back a token")
 	}
 
-	events := f.audit.all()
-	if len(events) != 1 || events[0].Confirmation != "bypassed" {
-		t.Fatalf("audit = %+v, want one bypassed delete", events)
+	// And the bypass is on the audit trail, written exactly as it was called.
+	story := f.story(t, t.Context(), events.EntityItem, int64(f.ids["bits"]))
+	last := story[len(story)-1]
+	if last.Type != events.ItemDeleted || last.Confirmation != "bypassed" {
+		t.Fatalf("last event = %+v, want a bypassed delete", last)
 	}
 }
 
@@ -185,12 +209,10 @@ func TestDeleteItemBypassesForATrustedCaller(t *testing.T) {
 		t.Fatalf("trusted caller got %+v, want a bypassed deletion", done)
 	}
 
-	events := f.audit.all()
-	if len(events) != 1 {
-		t.Fatalf("audit recorded %d events, want one", len(events))
-	}
-	if events[0].Caller != "automation" || events[0].Confirmation != "bypassed" {
-		t.Fatalf("audit event = %+v, want the trusted caller recorded as bypassed", events[0])
+	story := f.story(t, t.Context(), events.EntityItem, int64(f.ids["bits"]))
+	last := story[len(story)-1]
+	if last.Type != events.ItemDeleted || last.Actor != "automation" || last.Confirmation != "bypassed" {
+		t.Fatalf("event = %+v, want the trusted caller recorded as bypassed", last)
 	}
 }
 
@@ -208,8 +230,9 @@ func TestUntrustedCallerStillAsks(t *testing.T) {
 	if proposal.Deleted || proposal.Confirmation != "pending" {
 		t.Fatalf("an untrusted caller got %+v, want a pending confirmation", proposal)
 	}
-	if len(f.audit.all()) != 0 {
-		t.Fatal("a proposal was audited as a deletion")
+	story := f.story(t, t.Context(), events.EntityItem, int64(f.ids["bits"]))
+	if got := eventTypes(story); slices.Contains(got, events.ItemDeleted) {
+		t.Fatalf("event types = %v, want no deletion for a proposal", got)
 	}
 }
 

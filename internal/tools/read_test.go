@@ -7,18 +7,19 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 	"github.com/nicolasalberti00/homey/internal/storage"
 )
 
 // fixture is a small home in a real database, with the registry of its tools,
-// the confirmer the destructive tools issue tokens through and the ids of the
-// items the tests reach for.
+// the confirmer the destructive tools issue tokens through, the reader of the
+// event log the mutations write and the ids of the items the tests reach for.
 type fixture struct {
 	registry  *Registry
 	ids       map[string]inventory.ItemID
 	confirmer *Confirmer
-	audit     *auditLog
+	events    events.Store
 }
 
 // newFixture builds a home with two rooms, a nested toolbox and two drills
@@ -93,13 +94,11 @@ func newFixture(t *testing.T) fixture {
 	}
 
 	confirmer := NewConfirmer(DefaultConfirmTTL)
-	audit := &auditLog{}
 	inventory := Inventory{
 		Rooms:         repos.Rooms,
 		Containers:    repos.Containers,
 		Items:         repos.Items,
 		Confirmations: confirmer,
-		Audit:         audit.record,
 	}
 	list, err := inventory.Tools()
 	if err != nil {
@@ -109,7 +108,10 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	return fixture{registry: registry, ids: ids, confirmer: confirmer, audit: audit}
+	return fixture{
+		registry: registry, ids: ids, confirmer: confirmer,
+		events: storage.NewEventStore(db),
+	}
 }
 
 // call runs one tool of the registry and returns what it answered. It acts as
@@ -132,6 +134,26 @@ func (f fixture) callAs(t *testing.T, ctx context.Context, name, input string) s
 		t.Fatalf("%s(%s): %v", name, input, err)
 	}
 	return string(output)
+}
+
+// history reads the event log the mutations wrote, newest first.
+func (f fixture) history(t *testing.T, ctx context.Context, limit int) []events.Event {
+	t.Helper()
+	history, err := f.events.Recent(ctx, limit)
+	if err != nil {
+		t.Fatalf("reading the event log: %v", err)
+	}
+	return history
+}
+
+// story reads one entity's events, oldest first.
+func (f fixture) story(t *testing.T, ctx context.Context, kind events.EntityKind, id int64) []events.Event {
+	t.Helper()
+	story, err := f.events.ForEntity(ctx, kind, id)
+	if err != nil {
+		t.Fatalf("reading the events of %s %d: %v", kind, id, err)
+	}
+	return story
 }
 
 // writerContext is the identity the fixtures act as: an in-process caller with

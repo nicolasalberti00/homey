@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
@@ -139,6 +140,12 @@ func (t typedTool[In, Out]) Call(ctx context.Context, input json.RawMessage) (js
 	if err := authorize(ctx, t.Name(), t.definition.Permission); err != nil {
 		return nil, err
 	}
+
+	// The storage layer writes the event log next to the mutation, so who is
+	// calling and which tool carries it out travel in the context. A caller
+	// the transport never named leaves the event unattributed.
+	caller, _ := CallerFrom(ctx)
+	ctx = events.WithActor(ctx, events.Actor{Name: caller.Name, Tool: t.Name()})
 
 	// The schema validator works on JSON values, not on Go structs, so the
 	// arguments are checked in the shape the schema describes and the typed

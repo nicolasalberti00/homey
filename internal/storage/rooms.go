@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
@@ -53,13 +54,15 @@ func (r *roomRepo) Create(ctx context.Context, room *inventory.Room) error {
 	if err := room.Validate(); err != nil {
 		return err
 	}
-	if err := scanRoom(r.db.QueryRowContext(ctx, insertRoomSQL, room.Name, room.Description), room); err != nil {
-		if isUniqueViolation(err) {
-			return fmt.Errorf("a room named %q already exists: %w", room.Name, inventory.ErrConflict)
+	return withTx(ctx, r.db, func(tx *sql.Tx) error {
+		if err := scanRoom(tx.QueryRowContext(ctx, insertRoomSQL, room.Name, room.Description), room); err != nil {
+			if isUniqueViolation(err) {
+				return fmt.Errorf("a room named %q already exists: %w", room.Name, inventory.ErrConflict)
+			}
+			return fmt.Errorf("creating room: %w", err)
 		}
-		return fmt.Errorf("creating room: %w", err)
-	}
-	return nil
+		return record(ctx, tx, events.RoomCreated, events.EntityRoom, int64(room.ID), roomEvent(*room))
+	})
 }
 
 // Get implements inventory.RoomRepo.
@@ -91,23 +94,28 @@ func (r *roomRepo) Update(ctx context.Context, room *inventory.Room) error {
 	if err := room.Validate(); err != nil {
 		return err
 	}
-	err := scanRoom(r.db.QueryRowContext(ctx, updateRoomSQL, room.Name, room.Description, room.ID), room)
-	if errors.Is(err, sql.ErrNoRows) {
-		return notFound("room", int64(room.ID))
-	}
-	if isUniqueViolation(err) {
-		return fmt.Errorf("a room named %q already exists: %w", room.Name, inventory.ErrConflict)
-	}
-	if err != nil {
-		return fmt.Errorf("updating room %d: %w", room.ID, err)
-	}
-	return nil
+	return withTx(ctx, r.db, func(tx *sql.Tx) error {
+		err := scanRoom(tx.QueryRowContext(ctx, updateRoomSQL, room.Name, room.Description, room.ID), room)
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("room", int64(room.ID))
+		}
+		if isUniqueViolation(err) {
+			return fmt.Errorf("a room named %q already exists: %w", room.Name, inventory.ErrConflict)
+		}
+		if err != nil {
+			return fmt.Errorf("updating room %d: %w", room.ID, err)
+		}
+		return record(ctx, tx, events.RoomUpdated, events.EntityRoom, int64(room.ID), roomEvent(*room))
+	})
 }
 
 // Delete implements inventory.RoomRepo.
 func (r *roomRepo) Delete(ctx context.Context, id inventory.RoomID) error {
 	return withTx(ctx, r.db, func(tx *sql.Tx) error {
-		if err := requireRoom(ctx, tx, id); err != nil {
+		// Read the room first: the event carries what was there, and the row
+		// is gone after this.
+		room, err := getRoom(ctx, tx, id)
+		if err != nil {
 			return err
 		}
 
@@ -123,7 +131,7 @@ func (r *roomRepo) Delete(ctx context.Context, id inventory.RoomID) error {
 		if _, err := tx.ExecContext(ctx, deleteRoomSQL, id); err != nil {
 			return fmt.Errorf("deleting room %d: %w", id, err)
 		}
-		return nil
+		return record(ctx, tx, events.RoomDeleted, events.EntityRoom, int64(id), roomEvent(room))
 	})
 }
 

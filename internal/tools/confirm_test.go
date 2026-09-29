@@ -1,8 +1,6 @@
 package tools
 
 import (
-	"context"
-	"sync"
 	"testing"
 	"time"
 )
@@ -125,23 +123,5 @@ func TestCallerTravelsInTheContext(t *testing.T) {
 	}
 }
 
-// auditLog is a spy that remembers what the destructive tools recorded, so a
-// test can assert on the audit trail without a storage layer.
-type auditLog struct {
-	mu     sync.Mutex
-	events []AuditEvent
-}
-
-func (l *auditLog) record(_ context.Context, event AuditEvent) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.events = append(l.events, event)
-}
-
-func (l *auditLog) all() []AuditEvent {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	events := make([]AuditEvent, len(l.events))
-	copy(events, l.events)
-	return events
-}
+// auditLog is gone: the event log is written by the storage layer now, and the
+// tests read it back through the events store the fixture holds.

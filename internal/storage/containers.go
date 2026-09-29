@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/nicolasalberti00/homey/internal/events"
 	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
@@ -13,6 +14,13 @@ import (
 type containerRepo struct {
 	db *sql.DB
 }
+
+// containerOriginSQL reads where a container sits, for the from side of a move
+// event.
+const containerOriginSQL = `
+SELECT room_id, parent_id
+FROM containers
+WHERE id = ?`
 
 const (
 	insertContainerSQL = `
@@ -129,7 +137,7 @@ func (r *containerRepo) Create(ctx context.Context, container *inventory.Contain
 			}
 			return fmt.Errorf("creating container: %w", err)
 		}
-		return nil
+		return record(ctx, tx, events.ContainerCreated, events.EntityContainer, int64(container.ID), containerEvent(*container))
 	})
 }
 
@@ -231,7 +239,7 @@ func (r *containerRepo) Update(ctx context.Context, container *inventory.Contain
 			}
 			return fmt.Errorf("updating container %d: %w", container.ID, err)
 		}
-		return nil
+		return record(ctx, tx, events.ContainerUpdated, events.EntityContainer, int64(container.ID), containerEvent(*container))
 	})
 }
 
@@ -241,13 +249,20 @@ func (r *containerRepo) Move(ctx context.Context, id inventory.ContainerID, dest
 		return err
 	}
 	return withTx(ctx, r.db, func(tx *sql.Tx) error {
-		var currentRoom inventory.RoomID
-		err := tx.QueryRowContext(ctx, containerRoomSQL, id).Scan(&currentRoom)
+		var room, parent sql.NullInt64
+		err := tx.QueryRowContext(ctx, containerOriginSQL, id).Scan(&room, &parent)
 		if errors.Is(err, sql.ErrNoRows) {
 			return notFound("container", int64(id))
 		}
 		if err != nil {
 			return fmt.Errorf("loading container %d: %w", id, err)
+		}
+		// Where the container pointed at is what the event records as "from".
+		var origin inventory.Location
+		if parent.Valid {
+			origin = inventory.ContainerLocation(inventory.ContainerID(parent.Int64))
+		} else {
+			origin = inventory.RoomLocation(inventory.RoomID(room.Int64))
 		}
 
 		var newRoom inventory.RoomID
@@ -295,15 +310,20 @@ func (r *containerRepo) Move(ctx context.Context, id inventory.ContainerID, dest
 			}
 			return fmt.Errorf("moving container %d: %w", id, err)
 		}
-		return nil
+		return record(ctx, tx, events.ContainerMoved, events.EntityContainer, int64(id), moveEvent(origin, destination))
 	})
 }
 
 // Delete implements inventory.ContainerRepo.
 func (r *containerRepo) Delete(ctx context.Context, id inventory.ContainerID) error {
 	return withTx(ctx, r.db, func(tx *sql.Tx) error {
-		if err := requireContainer(ctx, tx, id); err != nil {
-			return err
+		var stored inventory.Container
+		err := scanContainer(tx.QueryRowContext(ctx, getContainerSQL, id), &stored)
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound("container", int64(id))
+		}
+		if err != nil {
+			return fmt.Errorf("loading container %d: %w", id, err)
 		}
 
 		var containers, items int
@@ -318,7 +338,7 @@ func (r *containerRepo) Delete(ctx context.Context, id inventory.ContainerID) er
 		if _, err := tx.ExecContext(ctx, deleteContainerSQL, id); err != nil {
 			return fmt.Errorf("deleting container %d: %w", id, err)
 		}
-		return nil
+		return record(ctx, tx, events.ContainerDeleted, events.EntityContainer, int64(id), containerEvent(stored))
 	})
 }
 

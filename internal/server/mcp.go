@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -40,7 +39,6 @@ func toolRegistry(logger *slog.Logger, repos storage.Repos) *tools.Registry {
 		Rooms:      repos.Rooms,
 		Containers: repos.Containers,
 		Items:      repos.Items,
-		Audit:      auditToLog(logger),
 	}
 	list, err := inventory.Tools()
 	if err != nil {
@@ -52,20 +50,6 @@ func toolRegistry(logger *slog.Logger, repos storage.Repos) *tools.Registry {
 	}
 	logger.Debug("tools registered", "tools", len(registry.List()))
 	return registry
-}
-
-// auditToLog records a destructive action in the structured log. The key is the
-// one the audit trail will use when Phase 7 gives it a table: a bypassed
-// confirmation is written as confirmation=bypassed.
-func auditToLog(logger *slog.Logger) tools.AuditFunc {
-	return func(_ context.Context, event tools.AuditEvent) {
-		logger.Info("audit",
-			"tool", event.Tool,
-			"item_id", event.ItemID,
-			"caller", event.Caller,
-			"confirmation", event.Confirmation,
-		)
-	}
 }
 
 // mcpAuth authenticates an MCP request with a bearer token. The MCP transport
