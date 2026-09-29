@@ -1,6 +1,6 @@
 package server
 
-// Step 6.8 — MCP integration test in-process: a real client over the SDK's
+// MCP integration test in-process: a real client over the SDK's
 // in-memory transport, against a real registry over a real database. No HTTP
 // and no auth sit between the caller and the tools, so this is where the
 // deterministic scenarios of the spec §17 live, together with the permission
@@ -323,7 +323,7 @@ func TestMCPInProcessRefusesWritesWithoutACaller(t *testing.T) {
 	}
 }
 
-// TestMCPInProcessDescribesEveryTool is the schema part of Step 6.8: what a
+// TestMCPInProcessDescribesEveryTool is the schema half: what a
 // client lists is the contract, so the tool names, the schemas and the hints a
 // host reasons on are all pinned down here.
 func TestMCPInProcessDescribesEveryTool(t *testing.T) {

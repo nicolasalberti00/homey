@@ -1,4 +1,4 @@
-// Theme state (Step 4.2): light, dark or system, persisted in localStorage.
+// Theme state: light, dark or system, persisted in localStorage.
 // The palette follows `color-scheme` (see app.css), so "system" simply keeps
 // both and lets the OS decide.
 

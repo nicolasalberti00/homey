@@ -1,6 +1,6 @@
 package server
 
-// Step 7.1 from the HTTP surface: a mutation that goes through the REST API or
+// From the HTTP surface: a mutation that goes through the REST API or
 // the MCP endpoint leaves its event behind, with the caller and the tool that
 // carried it out.
 

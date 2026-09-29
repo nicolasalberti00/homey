@@ -1,6 +1,16 @@
 # Issue tracker: Local Markdown
 
-Issues and specs for this repo live as markdown files in `.scratch/`.
+Two places hold the state of this project:
+
+- **The plan of record** is the Obsidian vault at
+  `~/Library/Mobile Documents/com~apple~CloudDocs/NAVault/projects/homey/`:
+  `Homey Roadmap.md` (what is planned and what is done), `Homey Kanban.md`
+  (columns) and one note per working session under `Notes/`, indexed by
+  `Notes/Indice Sessioni.md`. Roadmap entries are ticked and annotated with
+  the pull request that delivered them; notes are written in Italian, pull
+  requests and repository text in English.
+- **Specs and tickets** a skill publishes live as markdown files in
+  `.scratch/`, as described below.
 
 ## Conventions
 

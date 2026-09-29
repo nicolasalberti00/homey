@@ -1,6 +1,6 @@
 package backup
 
-// Step 7.3 of the roadmap: an export that carries the whole inventory in a
+// The backup document: an export that carries the whole inventory in a
 // portable, name-based document, and an import that validates it and applies
 // it idempotently. The tests run against real repositories, so the round trip
 // goes through the same SQL a fresh instance would.

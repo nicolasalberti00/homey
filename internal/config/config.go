@@ -46,7 +46,7 @@ type Config struct {
 	LogFormat string
 	// CORSOrigins lists allowed browser origins; empty means same-origin only.
 	CORSOrigins []string
-	// MCPEnabled switches the MCP endpoint (Phase 6) on or off.
+	// MCPEnabled switches the MCP endpoint on or off.
 	MCPEnabled bool
 	// RateLimitWrites caps mutating /api/v1 requests per client IP per
 	// minute; 0 disables the limit.

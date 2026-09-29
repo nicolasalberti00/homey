@@ -11,7 +11,7 @@ import (
 	"github.com/nicolasalberti00/homey/internal/auth"
 )
 
-// TestMCPReadOnlyTokenCannotWrite is the exit criterion of Step 6.6: a token
+// TestMCPReadOnlyTokenCannotWrite is what the permission rules promise: a token
 // without the write scope may explore the inventory but can change nothing,
 // whichever write tool it reaches for.
 func TestMCPReadOnlyTokenCannotWrite(t *testing.T) {

@@ -1,5 +1,5 @@
 // Package backup exports the whole inventory as a portable JSON document and
-// imports it back: homey's backup format (roadmap Step 7.3).
+// imports it back: homey's backup format.
 //
 // The document names things instead of carrying the ids of the instance it
 // came from — a room by its name, a container by its name inside its room, an

@@ -1,5 +1,5 @@
 // Package server wires homey's HTTP surface: health endpoints today, the
-// /api/v1 REST API in Phase 3 and the MCP endpoint in Phase 6.
+// /api/v1 REST API and the MCP endpoint.
 package server
 
 import (

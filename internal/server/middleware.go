@@ -1,6 +1,6 @@
 package server
 
-// Transport hardening for the API surface (roadmap Steps 3.6 and 7.2):
+// Transport hardening for the API surface:
 //
 //   - securityHeaders adds defensive headers to every response;
 //   - cors answers preflights and tags responses for configured origins,
@@ -138,7 +138,7 @@ func writeProblem(w http.ResponseWriter, status int, detail string) {
 // maxRequestBodyBytes caps how much of a request body is read. An item is a
 // few kilobytes and the largest operation today is a page of search results,
 // so 4 MiB is room to grow while keeping a client from filling memory before
-// validation ever sees its input (Step 7.2 security review).
+// validation ever sees its input (found by the security review).
 const maxRequestBodyBytes int64 = 4 << 20
 
 // bodyLimit refuses bodies over the cap: the announced length is rejected

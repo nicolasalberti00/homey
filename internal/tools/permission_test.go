@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestWriteToolsNeedAWriteCaller is the guard Step 6.6 hangs on: a tool that
+// TestWriteToolsNeedAWriteCaller is the guard permission enforcement hangs on: a tool that
 // changes the inventory runs only for a caller granted the write scope. A
 // read-only identity — and a context that never said who is calling — is
 // refused before anything is read or written.

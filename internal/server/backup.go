@@ -1,6 +1,6 @@
 package server
 
-// Export and import: the backup surface of Step 7.3. The document is built
+// Export and import: the backup surface. The document is built
 // and applied by internal/backup, which owns the format and the rules; this
 // layer only carries it, and lets the scope and the error mapping do their
 // job — reading the whole inventory is a read, changing it is a write.

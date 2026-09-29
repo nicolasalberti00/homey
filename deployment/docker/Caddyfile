@@ -1,0 +1,10 @@
+# The site homey answers on. Replace homey.example.com with the domain that
+# points at this host and Caddy obtains and renews the certificate for it
+# (Let's Encrypt; ports 80 and 443 open to the internet).
+#
+# `localhost` works for a first run: Caddy then issues an internal
+# certificate and the browser warns about it.
+homey.example.com {
+	# Homey speaks plain HTTP; TLS ends here.
+	reverse_proxy homey:8080
+}
