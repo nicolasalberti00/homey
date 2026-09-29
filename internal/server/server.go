@@ -34,9 +34,9 @@ func New(cfg *config.Config, logger *slog.Logger, db *sql.DB) *http.Server {
 }
 
 // NewHandler builds the root HTTP handler: security headers, CORS, rate
-// limits and failed-auth blocking wrap the mux that carries health checks,
-// the Huma API and the embedded UI. Kept separate from New so tests can
-// exercise it with httptest.
+// limits, the request body cap and failed-auth blocking wrap the mux that
+// carries health checks, the Huma API and the embedded UI. Kept separate from
+// New so tests can exercise it with httptest.
 func NewHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB) http.Handler {
 	return newHandler(cfg, logger, db, webui.Assets())
 }
@@ -77,6 +77,10 @@ func newHandler(cfg *config.Config, logger *slog.Logger, db *sql.DB, ui fs.FS) h
 
 	var handler http.Handler = mux
 	handler = authFailureLimit(cfg.RateLimitAuthFailures, handler)
+	// The body cap sits inside the write limit: a flood of oversized writes
+	// is counted before it is refused, so being cheap to reject does not make
+	// it free.
+	handler = bodyLimit(maxRequestBodyBytes, handler)
 	handler = rateLimit(cfg.RateLimitWrites, handler)
 	handler = cors(cfg.CORSOrigins, handler)
 	handler = securityHeaders(handler)

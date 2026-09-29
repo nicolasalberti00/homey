@@ -281,6 +281,21 @@ content-hashed), revalidates the shell, and keeps unknown `/api/` paths as
 JSON problem documents. A build without the UI — a plain `go build` in a fresh
 clone — answers 404 with a hint instead of a blank page.
 
+## Security
+
+The spec's security requirements (§15) are worked through against the code in
+[`docs/security-review.md`](docs/security-review.md): authentication, scopes,
+input validation, parameterized SQL, rate limiting, CORS, headers, output
+escaping and the audit of destructive LLM actions — each with the test that
+keeps it true. Two findings are worth knowing in operation:
+
+- The database file is created `0600`, so the inventory and the token hashes
+  are the owner's alone; a file that already exists keeps its mode, and
+  `chmod 600 data/homey.db` tightens an old one.
+- The write rate limit covers `/api/v1/` **and** `POST /mcp`, keyed by the
+  direct peer address: behind a reverse proxy every client shares the proxy's
+  bucket, so tune `HOMEY_RATE_LIMIT_WRITES` there (or set it to `0`).
+
 ## Development
 
 ```bash
