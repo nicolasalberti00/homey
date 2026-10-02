@@ -204,7 +204,12 @@ func TestMCPClientListsAndCallsTools(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	// The tool surface is a contract with the clients.
-	want := []string{"add_item", "count_items", "delete_item", "get_item", "list_location", "move_item", "search_inventory", "update_item"}
+	want := []string{
+		"add_container", "add_item", "add_room", "count_items",
+		"delete_container", "delete_item", "delete_room", "get_item",
+		"list_location", "move_container", "move_item", "search_inventory",
+		"update_container", "update_item", "update_room",
+	}
 	if !slices.Equal(names, want) {
 		t.Fatalf("tools = %v, want %v", names, want)
 	}

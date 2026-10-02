@@ -40,6 +40,49 @@ type DeleteItemOutput struct {
 	ExpiresInSeconds  int      `json:"expires_in_seconds,omitempty" jsonschema:"how long the confirmation token stays valid"`
 }
 
+// proposal is a destructive call waiting for an answer: the token that would
+// carry it out, and how long it lasts.
+type proposal struct {
+	token   string
+	expires int
+}
+
+// authoriseDestructive decides what a destructive call does next, for every
+// tool that asks before it acts. It answers with the word to record —
+// "bypassed" or "confirmed" — when the caller may act now, and with a
+// proposal to answer with when the call must ask first. A token that does not
+// fit this exact action on this exact entity comes back as ErrConfirmation:
+// one rule, wherever the deletion runs from.
+func authoriseDestructive(
+	ctx context.Context,
+	confirmer *Confirmer,
+	tool, noun string,
+	entity int64,
+	confirm bool,
+	token string,
+) (string, *proposal, error) {
+	caller, _ := CallerFrom(ctx)
+	switch {
+	case confirm || caller.BypassConfirmation:
+		return confirmationBypassed, nil, nil
+
+	case token != "":
+		if !confirmer.redeem(tool, token, entity) {
+			return "", nil, fmt.Errorf(
+				"%w: the token is not valid for deleting %s %d; it may have expired, been used, or belong to another action. Call %s again without a token for a fresh one",
+				ErrConfirmation, noun, entity, tool)
+		}
+		return confirmationConfirmed, nil, nil
+
+	default:
+		issued, _, err := confirmer.issue(tool, entity)
+		if err != nil {
+			return "", nil, fmt.Errorf("issuing a confirmation token: %w", err)
+		}
+		return confirmationPending, &proposal{token: issued, expires: int(confirmer.ttl.Seconds())}, nil
+	}
+}
+
 // DeleteItem removes an item for good. It asks first: a call without confirm or
 // confirmation_token proposes the deletion and answers with a token, leaving
 // the item in place until that token comes back. A caller that has already
@@ -58,46 +101,30 @@ func (inv Inventory) DeleteItem(ctx context.Context, input DeleteItemInput) (Del
 	}
 	view := itemView(item, index.Path(item.Location))
 
-	caller, _ := CallerFrom(ctx)
-	confirmer := inv.confirmer()
-
-	switch {
-	case input.Confirm || caller.BypassConfirmation:
-		// The storage layer writes the event, so the caller and the way the
-		// step was authorised travel in the context next to it.
-		if err := inv.Items.Delete(events.WithActor(ctx, events.Actor{
-			Name: caller.Name, Tool: deleteItemTool, Confirmation: confirmationBypassed,
-		}), input.ID); err != nil {
-			return DeleteItemOutput{}, err
-		}
-		return DeleteItemOutput{Deleted: true, Item: view, Confirmation: confirmationBypassed}, nil
-
-	case input.ConfirmationToken != "":
-		if !confirmer.redeem(deleteItemTool, input.ConfirmationToken, input.ID) {
-			return DeleteItemOutput{}, fmt.Errorf(
-				"%w: the token is not valid for deleting item %d; it may have expired, been used, or belong to another action. Call delete_item again without a token for a fresh one",
-				ErrConfirmation, input.ID)
-		}
-		if err := inv.Items.Delete(events.WithActor(ctx, events.Actor{
-			Name: caller.Name, Tool: deleteItemTool, Confirmation: confirmationConfirmed,
-		}), input.ID); err != nil {
-			return DeleteItemOutput{}, err
-		}
-		return DeleteItemOutput{Deleted: true, Item: view, Confirmation: confirmationConfirmed}, nil
-
-	default:
-		token, _, err := confirmer.issue(deleteItemTool, input.ID)
-		if err != nil {
-			return DeleteItemOutput{}, fmt.Errorf("issuing a confirmation token: %w", err)
-		}
+	mode, pending, err := authoriseDestructive(ctx, inv.confirmer(),
+		deleteItemTool, "item", int64(input.ID), input.Confirm, input.ConfirmationToken)
+	if err != nil {
+		return DeleteItemOutput{}, err
+	}
+	if pending != nil {
 		return DeleteItemOutput{
 			Deleted:           false,
 			Item:              view,
-			Confirmation:      confirmationPending,
-			ConfirmationToken: token,
-			ExpiresInSeconds:  int(confirmer.ttl.Seconds()),
+			Confirmation:      mode,
+			ConfirmationToken: pending.token,
+			ExpiresInSeconds:  pending.expires,
 		}, nil
 	}
+
+	// The storage layer writes the event, so the caller and the way the
+	// step was authorised travel in the context next to it.
+	caller, _ := CallerFrom(ctx)
+	if err := inv.Items.Delete(events.WithActor(ctx, events.Actor{
+		Name: caller.Name, Tool: deleteItemTool, Confirmation: mode,
+	}), input.ID); err != nil {
+		return DeleteItemOutput{}, err
+	}
+	return DeleteItemOutput{Deleted: true, Item: view, Confirmation: mode}, nil
 }
 
 // confirmer returns the confirmer to issue and redeem with, falling back to the

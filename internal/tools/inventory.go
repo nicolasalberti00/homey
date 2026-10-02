@@ -136,5 +136,13 @@ func (inv Inventory) Tools() ([]Tool, error) {
 		return nil, err
 	}
 
-	return []Tool{searchInventory, getItem, listLocation, countItems, addItem, updateItem, moveItem, deleteItem}, nil
+	placeTools, err := inv.placeTools()
+	if err != nil {
+		return nil, err
+	}
+
+	return append([]Tool{
+		searchInventory, getItem, listLocation, countItems,
+		addItem, updateItem, moveItem, deleteItem,
+	}, placeTools...), nil
 }

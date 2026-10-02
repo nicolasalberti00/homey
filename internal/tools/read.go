@@ -27,9 +27,10 @@ type ItemView struct {
 
 // LocationView is how a container is presented to a model.
 type LocationView struct {
-	ID   inventory.ContainerID `json:"id"`
-	Name string                `json:"name"`
-	Path string                `json:"path" jsonschema:"the container as a path: \"Garage > Toolbox\""`
+	ID          inventory.ContainerID `json:"id"`
+	Name        string                `json:"name"`
+	Description string                `json:"description,omitempty" jsonschema:"what the container is for"`
+	Path        string                `json:"path" jsonschema:"the container as a path: \"Garage > Toolbox\""`
 }
 
 // RoomView is how a room is presented to a model.
@@ -161,7 +162,7 @@ func (inv Inventory) ListLocation(ctx context.Context, input ListLocationInput) 
 		}
 		output := ListLocationOutput{Location: "Home", Rooms: make([]RoomView, 0, len(rooms))}
 		for _, room := range rooms {
-			output.Rooms = append(output.Rooms, RoomView{ID: room.ID, Name: room.Name, Description: room.Description})
+			output.Rooms = append(output.Rooms, roomView(room))
 		}
 		return output, nil
 	}
@@ -190,9 +191,10 @@ func (inv Inventory) ListLocation(ctx context.Context, input ListLocationInput) 
 	}
 	for _, container := range children {
 		output.Containers = append(output.Containers, LocationView{
-			ID:   container.ID,
-			Name: container.Name,
-			Path: index.Path(inventory.ContainerLocation(container.ID)),
+			ID:          container.ID,
+			Name:        container.Name,
+			Description: container.Description,
+			Path:        index.Path(inventory.ContainerLocation(container.ID)),
 		})
 	}
 	for _, item := range items {
@@ -265,6 +267,11 @@ func (inv Inventory) locationIndex(ctx context.Context) (inventory.LocationIndex
 		return inventory.LocationIndex{}, err
 	}
 	return inventory.NewLocationIndex(rooms, containers), nil
+}
+
+// roomView presents a room the way every tool answers with one.
+func roomView(room inventory.Room) RoomView {
+	return RoomView{ID: room.ID, Name: room.Name, Description: room.Description}
 }
 
 // itemView presents an item with the path of its location, which the caller

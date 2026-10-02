@@ -22,6 +22,13 @@ func TestWriteToolsNeedAWriteCaller(t *testing.T) {
 		{"update_item", `{"id":` + id + `,"quantity":2}`},
 		{"move_item", `{"id":` + id + `,"destination":"Garage"}`},
 		{"delete_item", `{"id":` + id + `}`},
+		{"add_room", `{"name":"Soffitta"}`},
+		{"update_room", `{"id":1,"name":"Soffitta"}`},
+		{"delete_room", `{"id":1}`},
+		{"add_container", `{"name":"Cassetto","location":"Garage"}`},
+		{"update_container", `{"id":1,"name":"Cassetto"}`},
+		{"move_container", `{"id":1,"destination":"Cucina"}`},
+		{"delete_container", `{"id":1}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,7 +95,11 @@ func TestReadToolsRunForAReadOnlyCaller(t *testing.T) {
 // writes must be marked write, and a tool marked read must not change anything.
 func TestPermissionCoversEveryTool(t *testing.T) {
 	f := newFixture(t)
-	writers := map[string]bool{"add_item": true, "update_item": true, "move_item": true, "delete_item": true}
+	writers := map[string]bool{
+		"add_item": true, "update_item": true, "move_item": true, "delete_item": true,
+		"add_room": true, "update_room": true, "delete_room": true,
+		"add_container": true, "update_container": true, "move_container": true, "delete_container": true,
+	}
 	readers := map[string]bool{"search_inventory": true, "get_item": true, "list_location": true, "count_items": true}
 
 	for _, tool := range f.registry.List() {
