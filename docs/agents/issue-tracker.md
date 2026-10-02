@@ -1,40 +1,40 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub Issues
 
-Two places hold the state of this project:
-
-- **The plan of record** is the Obsidian vault at
-  `~/Library/Mobile Documents/com~apple~CloudDocs/NAVault/projects/homey/`:
-  `Homey Roadmap.md` (what is planned and what is done), `Homey Kanban.md`
-  (columns) and one note per working session under `Notes/`, indexed by
-  `Notes/Indice Sessioni.md`. Roadmap entries are ticked and annotated with
-  the pull request that delivered them; notes are written in Italian, pull
-  requests and repository text in English.
-- **Specs and tickets** a skill publishes live as markdown files in
-  `.scratch/`, as described below.
+The tracker of this project is **GitHub Issues**:
+<https://github.com/nicolasalberti00/homey/issues>. The tracker lives online:
+nothing that tracks state — plans, boards, session logs — is kept in this
+repository.
 
 ## Conventions
 
-- One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
-- Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
-- Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
-- Comments and conversation history append to the bottom of the file under a `## Comments` heading
+- One feature, bug or decision per issue. The pull request that delivers it
+  closes it (`Closes #NN`) and is reviewed before anything merges into `main`.
+- Titles and bodies in English, like the rest of the repository, regardless of
+  the language the session is held in.
+- Triage uses the five roles in `triage-labels.md`; the GitHub label strings
+  equal the role names (`needs-triage`, `needs-info`, `ready-for-agent`,
+  `ready-for-human`, `wontfix`).
+- Specs and tickets a skill publishes become issues on GitHub: one issue per
+  ticket, dependencies expressed with the tracker's own links (a `Blocked by
+  #NN` line in the body), never a single combined file.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+Create the issues with the GitHub CLI:
+
+```bash
+gh issue create --title "…" --body "…"
+```
+
+A spec goes on the issue that tracks the feature (or gets its own issue when
+the skill asks for one); each ticket becomes its own issue, cross-referencing
+the others for its blocking edges.
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+```bash
+gh issue view <number>
+```
 
-## Wayfinding operations
-
-Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
-
-- **Map**: `.scratch/<effort>/map.md` — the Notes / Decisions-so-far / Fog body.
-- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved`.
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
-- **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+The user will normally pass the issue number or the URL directly; otherwise
+search by title with `gh issue list --search "…"`.

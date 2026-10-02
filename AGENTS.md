@@ -33,11 +33,9 @@ for the compose examples.
 
 ### Issue tracker
 
-Two places, two jobs. The plan of record is the Obsidian vault
-(`~/Library/Mobile Documents/com~apple~CloudDocs/NAVault/projects/homey/`):
-`Homey Roadmap.md`, `Homey Kanban.md` and the session notes. Specs and tickets
-that a skill publishes live under `.scratch/<feature-slug>/` (local markdown
-tracker). See `docs/agents/issue-tracker.md`.
+**GitHub Issues** is the tracker: one issue per feature or problem, pull
+requests close them (`Closes #NN`), triage labels equal the role names. See
+`docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

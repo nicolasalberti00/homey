@@ -48,10 +48,9 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 
 There is no `CONTEXT.md` yet and `docs/adr/` is empty: both are created the
 first time a term or a decision actually gets resolved, by the skill above.
-Until then the vocabulary is whatever `README.md`, the code and the tests say.
-Do not confuse them with the Obsidian vault (`NAVault/projects/homey/`), which
-holds planning state — roadmap, kanban, session notes — and no domain
-definitions.
+Until then the vocabulary is whatever `README.md`, the code, the tests and the
+issues say. Planning material — what is planned, what a session did — describes
+features; it is not a domain definition and never replaces `CONTEXT.md`.
 
 ## Flag ADR conflicts
 
