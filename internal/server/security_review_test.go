@@ -1,6 +1,6 @@
 package server
 
-// Step 7.2 (security review) findings that had no guard: the size of a request
+// Security review findings that had no guard: the size of a request
 // body, the write rate limit over the MCP endpoint, and the promise that no log
 // line carries a token. They run against the production handler chain.
 

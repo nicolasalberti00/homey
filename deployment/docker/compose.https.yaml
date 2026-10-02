@@ -1,0 +1,53 @@
+# homey behind a reverse proxy with HTTPS, certificates included.
+#
+#   cd deployment/docker
+#   # edit Caddyfile: put your domain where homey.example.com is
+#   docker compose -f compose.https.yaml up -d
+#
+# Caddy fetches and renews the certificate for that domain on its own (ports
+# 80 and 443 must be reachable from the internet), and homey is not published
+# on the host: only the proxy talks to it.
+services:
+  homey:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        VERSION: dev
+    image: homey:dev
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - homey_data:/data
+    environment:
+      HOMEY_LOG_FORMAT: json
+      # Behind the proxy every visitor shares one address, so the per-IP
+      # limits would count them together (see README.md in this directory).
+      # The proxy is expected to do its own limiting here.
+      HOMEY_RATE_LIMIT_WRITES: "0"
+      HOMEY_RATE_LIMIT_AUTH_FAILURES: "0"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - homey
+
+volumes:
+  homey_data:
+  caddy_data:
+  caddy_config:

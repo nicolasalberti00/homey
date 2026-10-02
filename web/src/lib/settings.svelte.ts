@@ -1,4 +1,4 @@
-// Connection settings (Step 4.3): API base URL and bearer token, persisted
+// Connection settings: API base URL and bearer token, persisted
 // in localStorage and read by the API client on every request.
 
 export type Settings = {

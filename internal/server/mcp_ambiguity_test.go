@@ -9,7 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// TestMCPAmbiguousDestinationAsksForAChoice is Step 6.7 over the wire: a
+// TestMCPAmbiguousDestinationAsksForAChoice is the clarification flow over the wire: a
 // destination that fits two places comes back as a structured clarification,
 // the item does not move, and naming the full path carries the call through.
 func TestMCPAmbiguousDestinationAsksForAChoice(t *testing.T) {

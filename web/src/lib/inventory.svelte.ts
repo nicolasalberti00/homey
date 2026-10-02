@@ -1,4 +1,4 @@
-// Shared inventory state (Step 4.4+): rooms, containers and items are loaded
+// Shared inventory state: rooms, containers and items are loaded
 // once and reused by the dashboard, rooms and (later) container/item screens.
 //
 // For a home inventory the three list endpoints return the whole dataset

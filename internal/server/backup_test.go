@@ -1,6 +1,6 @@
 package server
 
-// Step 7.3 from the HTTP surface: a document exported by one instance is
+// From the HTTP surface: a document exported by one instance is
 // imported by another, and the two scopes are told apart — reading the backup
 // is a read, writing it is a write.
 

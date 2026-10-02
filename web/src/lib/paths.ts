@@ -1,4 +1,4 @@
-// Path and label helpers for locations (Step 4.4+): pure functions over the
+// Path and label helpers for locations: pure functions over the
 // loaded lists, no reactive state, so they live in a plain module.
 
 import type { Container, LocationRef, Room } from '$lib/api/client';

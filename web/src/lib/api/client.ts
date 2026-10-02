@@ -1,4 +1,4 @@
-// Typed API client (Step 4.3).
+// Typed API client.
 //
 // Request and response types come from the generated OpenAPI schema
 // (`schema.d.ts`, regenerated with `npm run api:generate` and verified in

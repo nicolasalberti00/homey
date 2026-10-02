@@ -3,17 +3,20 @@
 ## Project
 
 homey — self-hosted home inventory: Go + SQLite core, REST API, MCP server,
-Web UI. See `README.md` for the overview, configuration and roadmap.
+Web UI. `README.md` is the overview and the configuration reference; the
+user-facing guides live in `docs/` (`mcp.md` for MCP clients,
+`security-review.md` for the security checklist) and in `deployment/docker/`
+for the compose examples.
 
 ## Development workflow
 
 - `main` is always green and releasable; never commit or push directly to it.
-- One unit of work (typically a roadmap step) per branch, named `feat/…`, `fix/…`,
-  `chore/…`, `ci/…` or `docs/…` (e.g. `feat/phase-2-domain-types`).
+- One unit of work per branch, named `feat/…`, `fix/…`, `chore/…`, `ci/…` or
+  `docs/…` (e.g. `feat/events-audit`).
 - When the work is complete (`gofmt`, `go vet` and `go test ./...` green, plus the
   75% coverage floor: `go test -coverpkg=./internal/...,./mcp/... -coverprofile=coverage.out ./... && go run ./cmd/coverage`), push the
-  branch and open a pull request with `gh pr create` describing the step and its
-  exit criteria.
+  branch and open a pull request with `gh pr create` describing what changed
+  and how to verify it.
 - Keep PRs small and focused; leave them for review — do not merge into `main`
   unless explicitly asked.
 - Write pull request titles and descriptions in English, like the rest of the
@@ -30,7 +33,9 @@ Web UI. See `README.md` for the overview, configuration and roadmap.
 
 ### Issue tracker
 
-Issues and specs for this repo live as markdown files under `.scratch/<feature-slug>/` (local markdown tracker). See `docs/agents/issue-tracker.md`.
+**GitHub Issues** is the tracker: one issue per feature or problem, pull
+requests close them (`Closes #NN`), triage labels equal the role names. See
+`docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

@@ -86,7 +86,7 @@ const (
 	// two-step confirmation (the default and safest policy).
 	ConfirmationRequired Confirmation = "required"
 	// ConfirmationBypass marks a trusted token allowed to perform destructive
-	// operations directly. It is explicit per token and audited by Phase 6.
+	// operations directly. It is explicit per token and lands in the event log.
 	ConfirmationBypass Confirmation = "bypass"
 )
 

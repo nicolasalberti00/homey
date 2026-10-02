@@ -1,6 +1,6 @@
 package webui
 
-// Output escaping, from the roadmap's security review (Step 7.2): the built UI
+// Output escaping, from the security review: the built UI
 // is what ships, but the sink that would make stored XSS possible lives in the
 // sources, so the sources are what gets checked. Svelte escapes everything it
 // renders; the only ways out of that are the raw-HTML directive and the DOM

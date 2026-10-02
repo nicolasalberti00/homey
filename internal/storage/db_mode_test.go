@@ -1,6 +1,6 @@
 package storage
 
-// The data at rest half of the security review (Step 7.2): the database holds
+// The data at rest half of the security review: the database holds
 // the whole inventory and the token hashes, so a fresh one is created for its
 // owner only.
 
