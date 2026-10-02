@@ -334,8 +334,10 @@ func TestMCPInProcessDescribesEveryTool(t *testing.T) {
 		t.Fatalf("listing tools: %v", err)
 	}
 	want := []string{
-		"add_item", "count_items", "delete_item", "get_item",
-		"list_location", "move_item", "search_inventory", "update_item",
+		"add_container", "add_item", "add_room", "count_items",
+		"delete_container", "delete_item", "delete_room", "get_item",
+		"list_location", "move_container", "move_item", "search_inventory",
+		"update_container", "update_item", "update_room",
 	}
 	got := make([]string, 0, len(list.Tools))
 	byName := make(map[string]*mcp.Tool, len(list.Tools))
@@ -364,11 +366,34 @@ func TestMCPInProcessDescribesEveryTool(t *testing.T) {
 			t.Fatalf("delete_item output is missing %q: %v", property, deleteOutput.Properties)
 		}
 	}
-	// The clarification is on the tools that take a place, not on delete_item,
-	// which answers with how the deletion stands instead.
-	moveItem := byName["move_item"]
-	if _, has := schemaOf(t, moveItem.OutputSchema).Properties["clarification"]; !has {
-		t.Fatal("move_item output does not advertise a clarification")
+	// The clarification is on the tools that take a place, not on the
+	// deletions, which answer with how the deletion stands instead.
+	for _, name := range []string{"add_item", "add_container", "move_item", "move_container"} {
+		if _, has := schemaOf(t, byName[name].OutputSchema).Properties["clarification"]; !has {
+			t.Fatalf("%s output does not advertise a clarification", name)
+		}
+	}
+	// The place deletions answer the way delete_item does, with the view of
+	// what would go instead of the item.
+	for _, tc := range []struct{ tool, view string }{
+		{"delete_room", "room"},
+		{"delete_container", "container"},
+	} {
+		placeInput := schemaOf(t, byName[tc.tool].InputSchema)
+		for _, property := range []string{"confirm", "confirmation_token", "id"} {
+			if _, has := placeInput.Properties[property]; !has {
+				t.Fatalf("%s input is missing %q: %v", tc.tool, property, placeInput.Properties)
+			}
+		}
+		placeOutput := schemaOf(t, byName[tc.tool].OutputSchema)
+		for _, property := range []string{"deleted", tc.view, "confirmation", "confirmation_token", "expires_in_seconds"} {
+			if _, has := placeOutput.Properties[property]; !has {
+				t.Fatalf("%s output is missing %q: %v", tc.tool, property, placeOutput.Properties)
+			}
+		}
+		if byName[tc.tool].Annotations.DestructiveHint == nil || !*byName[tc.tool].Annotations.DestructiveHint {
+			t.Fatalf("%s is not marked destructive", tc.tool)
+		}
 	}
 	if _, has := schemaOf(t, byName["search_inventory"].InputSchema).Properties["query"]; !has {
 		t.Fatal("search_inventory takes no query")

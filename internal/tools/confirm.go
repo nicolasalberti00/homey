@@ -7,8 +7,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/nicolasalberti00/homey/internal/inventory"
 )
 
 // ErrConfirmation reports a destructive step that was not authorised: a token
@@ -36,11 +34,13 @@ type Confirmer struct {
 	tokens map[string]pendingConfirmation
 }
 
-// pendingConfirmation is what a token stands for until it is spent.
+// pendingConfirmation is what a token stands for until it is spent. The entity
+// is the id of whatever the tool deletes — an item, a room, a container — and
+// the tool it was issued for tells the namespaces apart.
 type pendingConfirmation struct {
-	tool    string
-	itemID  inventory.ItemID
-	expires time.Time
+	tool     string
+	entityID int64
+	expires  time.Time
 }
 
 // NewConfirmer returns a confirmer whose tokens live ttl. A non-positive ttl
@@ -60,8 +60,8 @@ func NewConfirmer(ttl time.Duration) *Confirmer {
 // handed a confirmer still issues tokens, through this process-wide one.
 var defaultConfirmer = NewConfirmer(DefaultConfirmTTL)
 
-// issue mints a token authorising tool on itemID, and reports when it expires.
-func (c *Confirmer) issue(tool string, itemID inventory.ItemID) (string, time.Time, error) {
+// issue mints a token authorising tool on entity, and reports when it expires.
+func (c *Confirmer) issue(tool string, entity int64) (string, time.Time, error) {
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", time.Time{}, err
@@ -72,15 +72,15 @@ func (c *Confirmer) issue(tool string, itemID inventory.ItemID) (string, time.Ti
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.dropExpiredLocked()
-	c.tokens[token] = pendingConfirmation{tool: tool, itemID: itemID, expires: expires}
+	c.tokens[token] = pendingConfirmation{tool: tool, entityID: entity, expires: expires}
 	return token, expires, nil
 }
 
 // redeem spends a token. It answers true only when the token exists, has not
-// expired, was issued for this exact tool and item, and has not been spent
+// expired, was issued for this exact tool and entity, and has not been spent
 // before. A token for another action is left alone, so a mistake does not
 // cancel a confirmation that is still pending.
-func (c *Confirmer) redeem(tool, token string, itemID inventory.ItemID) bool {
+func (c *Confirmer) redeem(tool, token string, entity int64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -92,7 +92,7 @@ func (c *Confirmer) redeem(tool, token string, itemID inventory.ItemID) bool {
 		delete(c.tokens, token)
 		return false
 	}
-	if pending.tool != tool || pending.itemID != itemID {
+	if pending.tool != tool || pending.entityID != entity {
 		return false
 	}
 	delete(c.tokens, token)

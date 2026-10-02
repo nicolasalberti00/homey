@@ -29,6 +29,13 @@ Writing — a token with the `write` scope:
 | `update_item` | changes the fields it is given — name, description, quantity, tags, aliases, notes — and leaves the others alone |
 | `move_item` | puts an item in another room or container, leaving everything else about it alone |
 | `delete_item` | removes an item for good, after a confirmation step (below) |
+| `add_room` | records a new room and answers with its id |
+| `update_room` | changes the name or description it is given, and nothing else |
+| `delete_room` | removes a room for good, after a confirmation step (below); a room that still holds containers or items is refused |
+| `add_container` | records a new container in a room or container named as a path, and answers with its id and path |
+| `update_container` | changes the name or description it is given, and answers with the path as it stands after the change |
+| `move_container` | moves a container with everything inside it — containers and items — to another place |
+| `delete_container` | removes a container for good, after a confirmation step (below); one that still holds containers or items is refused |
 
 The registry enforces the permission **before** the handler runs: a read-only
 token (`--scope read`) sees the whole tool list but is refused on every write
@@ -60,19 +67,26 @@ so a model asks which one was meant rather than guessing.
 
 ## Deleting asks first
 
-`delete_item` never deletes silently:
+The three deletion tools — `delete_item`, `delete_room`, `delete_container` —
+never delete silently:
 
-1. A call with just an `id` answers `confirmation: "pending"`, the item that
-   would go, and a short-lived `confirmation_token` — **nothing is removed**.
+1. A call with just an `id` answers `confirmation: "pending"`, what would go
+   (the item, the room or the container), and a short-lived
+   `confirmation_token` — **nothing is removed**.
 2. Calling it again with that token in `confirmation_token` carries the
    deletion out and answers `confirmation: "confirmed"`.
 
-The token lasts two minutes and is bound to that one action and that one item:
-it cannot be replayed or spent elsewhere. Two bypasses exist, both explicit —
+The token lasts two minutes and is bound to that one action and that one
+entity: it cannot be replayed or spent elsewhere, so a token from `delete_item`
+does not confirm a `delete_room`. Two bypasses exist, both explicit —
 `confirm: true` in the same turn, and a token created with
 `--destructive-confirmation=bypass` — and both are recorded in the `events`
 table as `confirmation: "bypassed"` together with the tool and the token's
 name.
+
+A room or a container that still holds containers or items is refused when
+the deletion is carried out: the core never removes a place with something
+inside it, and the caller is told to move what it holds elsewhere first.
 
 ## Connecting a client
 
@@ -100,7 +114,7 @@ or to `.cursor/mcp.json` in the project:
 }
 ```
 
-Restart Cursor (or reload the MCP servers) and the eight tools appear.
+Restart Cursor (or reload the MCP servers) and the fifteen tools appear.
 
 ### Claude Code
 
@@ -222,7 +236,7 @@ curl -sS -X POST http://127.0.0.1:8080/mcp \
         "clientInfo":{"name":"curl","version":"0"}}}'
 ```
 
-Then `tools/list` returns the eight tools and `tools/call` runs one.
+Then `tools/list` returns the fifteen tools and `tools/call` runs one.
 
 ## When it does not work
 

@@ -16,10 +16,12 @@ import (
 // the confirmer the destructive tools issue tokens through, the reader of the
 // event log the mutations write and the ids of the items the tests reach for.
 type fixture struct {
-	registry  *Registry
-	ids       map[string]inventory.ItemID
-	confirmer *Confirmer
-	events    events.Store
+	registry   *Registry
+	ids        map[string]inventory.ItemID
+	rooms      map[string]inventory.RoomID
+	containers map[string]inventory.ContainerID
+	confirmer  *Confirmer
+	events     events.Store
 }
 
 // newFixture builds a home with two rooms, a nested toolbox and two drills
@@ -94,13 +96,13 @@ func newFixture(t *testing.T) fixture {
 	}
 
 	confirmer := NewConfirmer(DefaultConfirmTTL)
-	inventory := Inventory{
+	inv := Inventory{
 		Rooms:         repos.Rooms,
 		Containers:    repos.Containers,
 		Items:         repos.Items,
 		Confirmations: confirmer,
 	}
-	list, err := inventory.Tools()
+	list, err := inv.Tools()
 	if err != nil {
 		t.Fatalf("Tools: %v", err)
 	}
@@ -110,6 +112,13 @@ func newFixture(t *testing.T) fixture {
 	}
 	return fixture{
 		registry: registry, ids: ids, confirmer: confirmer,
+		rooms: map[string]inventory.RoomID{
+			"garage": garage.ID, "kitchen": kitchen.ID,
+		},
+		containers: map[string]inventory.ContainerID{
+			"toolbox": toolbox.ID, "drawer": drawer.ID,
+			"kitchen toolbox": kitchenToolbox.ID,
+		},
 		events: storage.NewEventStore(db),
 	}
 }

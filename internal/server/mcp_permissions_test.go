@@ -42,6 +42,13 @@ func TestMCPReadOnlyTokenCannotWrite(t *testing.T) {
 		{"update_item", map[string]any{"id": 1, "quantity": 5}},
 		{"move_item", map[string]any{"id": 1, "destination": "Garage"}},
 		{"delete_item", map[string]any{"id": 1, "confirm": true}},
+		{"add_room", map[string]any{"name": "Soffitta"}},
+		{"update_room", map[string]any{"id": 1, "name": "Soffitta"}},
+		{"delete_room", map[string]any{"id": 1, "confirm": true}},
+		{"add_container", map[string]any{"name": "Cassetto", "location": "Garage"}},
+		{"update_container", map[string]any{"id": 1, "name": "Cassetto"}},
+		{"move_container", map[string]any{"id": 1, "destination": "Cucina"}},
+		{"delete_container", map[string]any{"id": 1, "confirm": true}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

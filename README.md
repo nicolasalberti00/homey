@@ -151,12 +151,15 @@ an MCP host drives the inventory through tools instead of raw HTTP. It is on
 by default (`HOMEY_MCP_ENABLED=false` turns it off) and sits behind the same
 bearer tokens as the API.
 
-Eight tools: four readers (`search_inventory`, `get_item`, `list_location`,
-`count_items`) open to any valid token, four writers (`add_item`,
-`update_item`, `move_item`, `delete_item`) that need the `write` scope.
+Fifteen tools: four readers (`search_inventory`, `get_item`, `list_location`,
+`count_items`) open to any valid token, eleven writers that need the `write`
+scope — the items (`add_item`, `update_item`, `move_item`, `delete_item`) and
+the places (`add_room`, `update_room`, `delete_room`, `add_container`,
+`update_container`, `move_container`, `delete_container`).
 Places are named the way a person names them (`"Garage > Toolbox"`); a name
 that fits several places comes back as a clarification instead of a guess; and
-`delete_item` asks before it removes anything, with every bypass recorded.
+the deletions (`delete_item`, `delete_room`, `delete_container`) ask before
+they remove anything, with every bypass recorded.
 
 **[docs/mcp.md](docs/mcp.md)** has the client recipes (Cursor, Claude Code,
 Claude Desktop, claude.ai connectors, ChatGPT, Ollama), the tool reference,
