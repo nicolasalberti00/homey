@@ -51,9 +51,10 @@ export async function refreshInventory(): Promise<void> {
 	}
 }
 
-/** Loads once per session; safe to call from an effect on every page. */
+/** Loads when idle or after an error, so a page visit retries a failed load:
+ *  the first run has no token yet, and saving one in Settings must be enough. */
 export async function ensureLoaded(): Promise<void> {
-	if (status === 'idle') {
+	if (status === 'idle' || status === 'error') {
 		await refreshInventory();
 	}
 }

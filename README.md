@@ -10,6 +10,7 @@ database, no mandatory AI provider.
 ### Docker
 
 ```bash
+mkdir -p data && sudo chown 1000:1000 data # the container writes the database as uid 1000
 docker compose up -d
 curl -s http://localhost:8080/healthz
 ```
@@ -22,12 +23,10 @@ Create a token, then open <http://localhost:8080> and paste it in
 docker compose exec homey homey token create --name web --scope read,write
 ```
 
-Data lives in `./data` (SQLite). On Linux hosts make the directory writable by
-uid 1000, the user inside the container:
-
-```bash
-mkdir -p data && sudo chown 1000:1000 data
-```
+Data lives in `./data` (SQLite). The container runs as uid 1000 and that
+directory must be writable by it: the setup line above takes care of it, and
+it applies on Linux hosts and on macOS alike (Docker Desktop enforces the
+host's file permissions through its file sharing).
 
 To build for a specific architecture (amd64/arm64):
 
