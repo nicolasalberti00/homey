@@ -10,10 +10,6 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
-
-The tracker here is markdown, so a label is a `Status:` line near the top of
-the issue file, not a GitHub label (GitHub Issues are not enabled on this
-repository).
+When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table. The labels exist on the repository, so applying one is `gh issue edit <number> --add-label <label>`; `wontfix` is often paired with closing the issue.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
